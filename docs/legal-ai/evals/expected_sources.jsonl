@@ -1,0 +1,4 @@
+{"question_id":"q001","expected_sources":[{"document_hint":"Código dos Contratos Públicos","domain_any":["diariodarepublica.pt","dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
+{"question_id":"q003","expected_sources":[{"document_hint":"Código do Procedimento Administrativo","domain_any":["diariodarepublica.pt","dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
+{"question_id":"q007","expected_sources":[{"document_hint":"Regulamento Geral sobre a Proteção de Dados","domain_any":["eur-lex.europa.eu"],"required_metadata":["article_number","celex","source_url"]}]}
+{"question_id":"q010","expected_sources":[{"document_hint":"TED","domain_any":["ted.europa.eu","api.ted.europa.eu"],"required_metadata":["source_url"]}]}

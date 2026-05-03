@@ -1,0 +1,260 @@
+app:
+  description: Chat jurídico que delega a decisão final ao legal-engine-api.
+  icon: ⚖️
+  icon_background: '#E0F2FE'
+  mode: advanced-chat
+  name: Legal AI Chat
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.1
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: 'Faça uma pergunta jurídica. O sistema responde apenas quando existir evidência oficial suficiente.'
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions:
+    - 'Quais são os fundamentos de exclusão de propostas no CCP?'
+    - 'Explica o artigo 999.º do Código dos Contratos Públicos.'
+    - 'Há fonte oficial suficiente para responder a esta pergunta?'
+    suggested_questions_after_answer:
+      enabled: true
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: http-request
+      id: start-source-legal-chat-answer-http-target
+      source: start
+      sourceHandle: source
+      target: legal_chat_answer_http
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: http-request
+        targetType: code
+      id: legal-chat-answer-http-source-format-target
+      source: legal_chat_answer_http
+      sourceHandle: source
+      target: format_legal_answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: answer
+      id: format-legal-answer-source-answer-target
+      source: format_legal_answer
+      sourceHandle: source
+      target: answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: Start
+        type: start
+        variables: []
+      height: 54
+      id: start
+      position:
+        x: 80
+        y: 282
+      positionAbsolute:
+        x: 80
+        y: 282
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data:
+          - type: text
+            value: |-
+              {
+                "question": "{{#sys.query#}}",
+                "mode": "strict",
+                "current_only": true,
+                "top_k_dense": 40,
+                "top_k_sparse": 40,
+                "top_n": 8
+              }
+          type: json
+        desc: Chama o endpoint orquestrado e seguro do legal-engine-api.
+        headers: 'Content-Type:application/json'
+        method: POST
+        params: ''
+        retry_config:
+          enabled: false
+          max_retries: 1
+          retry_interval: 1000
+        selected: false
+        ssl_verify: true
+        timeout:
+          connect: 10
+          read: 60
+          write: 30
+        title: POST /chat/answer
+        type: http-request
+        url: http://host.docker.internal:8000/chat/answer
+        variables: []
+      height: 90
+      id: legal_chat_answer_http
+      position:
+        x: 384
+        y: 282
+      positionAbsolute:
+        x: 384
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: |-
+          import json
+
+          def _line_list(values):
+              if not values:
+                  return "Nenhum."
+              return "\n".join(f"- {value}" for value in values)
+
+          def _format_sources(evidence):
+              if not evidence:
+                  return "Nenhuma fonte oficial utilizável foi encontrada."
+              lines = []
+              for item in evidence:
+                  label = item.get("citation_label") or item.get("document_title") or item.get("source_url") or "Fonte"
+                  url = item.get("source_url", "")
+                  lines.append(f"- {label}: {url}" if url else f"- {label}")
+              return "\n".join(lines)
+
+          def main(response_body: str, status_code: int) -> dict:
+              if status_code < 200 or status_code >= 300:
+                  return {
+                      "formatted_answer": "O serviço jurídico não conseguiu validar a resposta com segurança neste momento. Por isso, não devo fornecer uma conclusão jurídica."
+                  }
+
+              try:
+                  payload = json.loads(response_body)
+              except Exception:
+                  return {
+                      "formatted_answer": "O serviço jurídico devolveu uma resposta inválida. Por segurança, não devo fornecer uma conclusão jurídica."
+                  }
+
+              verdict = payload.get("verdict", "abstain")
+              answer = payload.get("answer", "")
+              audit_id = payload.get("audit_id") or "não disponível"
+              warnings = payload.get("warnings", [])
+              evidence = payload.get("evidence", [])
+              unsupported_claims = payload.get("unsupported_claims", [])
+              missing_citations = payload.get("missing_citations", [])
+              hallucinated_identifiers = payload.get("hallucinated_identifiers", [])
+
+              formatted = [
+                  answer,
+                  "",
+                  f"Veredicto: {verdict}",
+                  f"Audit ID: {audit_id}",
+                  "",
+                  "Fontes oficiais:",
+                  _format_sources(evidence),
+              ]
+
+              if warnings:
+                  formatted.extend(["", "Avisos:", _line_list(warnings)])
+
+              issues = []
+              if unsupported_claims:
+                  issues.append("Afirmações não suportadas:\n" + _line_list(unsupported_claims))
+              if missing_citations:
+                  issues.append("Citações em falta:\n" + _line_list(missing_citations))
+              if hallucinated_identifiers:
+                  issues.append("Identificadores bloqueados:\n" + _line_list(hallucinated_identifiers))
+              if issues:
+                  formatted.extend(["", "Validação:", "\n".join(issues)])
+
+              return {"formatted_answer": "\n".join(formatted)}
+        code_language: python3
+        desc: Formata apenas campos já validados pelo backend.
+        outputs:
+          formatted_answer:
+            children: null
+            type: string
+        selected: false
+        title: Format safe answer
+        type: code
+        variables:
+        - value_selector:
+          - legal_chat_answer_http
+          - body
+          value_type: string
+          variable: response_body
+        - value_selector:
+          - legal_chat_answer_http
+          - status_code
+          value_type: number
+          variable: status_code
+      height: 54
+      id: format_legal_answer
+      position:
+        x: 688
+        y: 282
+      positionAbsolute:
+        x: 688
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        answer: '{{#format_legal_answer.formatted_answer#}}'
+        desc: ''
+        selected: true
+        title: Answer
+        type: answer
+        variables: []
+      height: 105
+      id: answer
+      position:
+        x: 992
+        y: 282
+      positionAbsolute:
+        x: 992
+        y: 282
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.8

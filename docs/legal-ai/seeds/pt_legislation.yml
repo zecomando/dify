@@ -1,0 +1,96 @@
+portugal_seed:
+  constitucional:
+    - title: Constituição da República Portuguesa
+      source: DRE
+      priority: p0
+
+  civil:
+    - title: Código Civil
+      source: DRE
+      priority: p0
+    - title: Código de Processo Civil
+      source: DRE
+      priority: p0
+    - title: Novo Regime do Arrendamento Urbano
+      source: DRE
+      priority: p1
+    - title: Lei de Defesa do Consumidor
+      source: DRE
+      priority: p1
+
+  penal:
+    - title: Código Penal
+      source: DRE
+      priority: p1
+    - title: Código de Processo Penal
+      source: DRE
+      priority: p1
+
+  laboral:
+    - title: Código do Trabalho
+      source: DRE
+      priority: p0
+    - title: Código de Processo do Trabalho
+      source: DRE
+      priority: p1
+
+  administrativo:
+    - title: Código do Procedimento Administrativo
+      source: DRE
+      priority: p0
+    - title: Código de Processo nos Tribunais Administrativos
+      source: DRE
+      priority: p0
+    - title: Estatuto dos Tribunais Administrativos e Fiscais
+      source: DRE
+      priority: p0
+
+  contratacao_publica:
+    - title: Código dos Contratos Públicos
+      source: DRE
+      priority: p0
+    - title: Decreto-Lei n.º 104/2011
+      source: DRE
+      priority: p1
+
+  fiscal:
+    - title: Lei Geral Tributária
+      source: DRE
+      priority: p1
+    - title: Código de Procedimento e de Processo Tributário
+      source: DRE
+      priority: p1
+    - title: Código do IRS
+      source: DRE
+      priority: p1
+    - title: Código do IRC
+      source: DRE
+      priority: p1
+    - title: Código do IVA
+      source: DRE
+      priority: p1
+
+  societario_insolvencia:
+    - title: Código das Sociedades Comerciais
+      source: DRE
+      priority: p1
+    - title: Código Comercial
+      source: DRE
+      priority: p2
+    - title: Código da Insolvência e da Recuperação de Empresas
+      source: DRE
+      priority: p1
+
+  digital:
+    - title: Regulamento Geral sobre a Proteção de Dados
+      source: EURLEX
+      priority: p0
+    - title: Lei n.º 58/2019
+      source: DRE
+      priority: p0
+    - title: Código do Direito de Autor e dos Direitos Conexos
+      source: DRE
+      priority: p2
+    - title: Código da Propriedade Industrial
+      source: DRE
+      priority: p2

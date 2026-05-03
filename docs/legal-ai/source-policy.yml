@@ -1,0 +1,186 @@
+version: 1
+name: legal_ai_source_policy
+mode_default: strict
+
+principle: >
+  The model is never the legal source. Only official sources validated by this
+  policy may ground legal conclusions.
+
+answer_authorities:
+  portugal:
+    - domain: diariodarepublica.pt
+      source: DRE
+      allowed_document_types:
+        - legislation
+        - official_notice
+      may_ground_answer: true
+      requires_consolidation_warning: true
+    - domain: dre.pt
+      source: DRE
+      allowed_document_types:
+        - legislation
+        - official_notice
+      may_ground_answer: true
+      requires_consolidation_warning: true
+    - domain: dgsi.pt
+      source: DGSI
+      allowed_document_types:
+        - case_law
+      may_ground_answer: true
+      required_metadata:
+        - court
+        - decision_date
+        - process_number
+        - source_url
+    - domain: jurisprudencia.csm.org.pt
+      source: CSM_JURISPRUDENCE
+      allowed_document_types:
+        - case_law
+      may_ground_answer: true
+      required_metadata:
+        - court
+        - decision_date
+        - process_number
+        - source_url
+    - domain: tribunalconstitucional.pt
+      source: TRIBUNAL_CONSTITUCIONAL
+      allowed_document_types:
+        - case_law
+      may_ground_answer: true
+      required_metadata:
+        - court
+        - decision_date
+        - process_number
+        - source_url
+    - domain: base.gov.pt
+      source: BASE
+      allowed_document_types:
+        - procurement_notice
+        - public_contract
+      may_ground_answer: true
+    - domain: impic.pt
+      source: IMPIC
+      allowed_document_types:
+        - official_guidance
+        - procurement_data
+      may_ground_answer: true
+
+  europa:
+    - domain: eur-lex.europa.eu
+      source: EURLEX
+      allowed_document_types:
+        - legislation
+        - treaty
+        - preparatory_act
+      may_ground_answer: true
+      requires_consolidation_warning: true
+      required_identifiers_any:
+        - celex
+        - eli
+    - domain: op.europa.eu
+      source: OP_EUROPA
+      allowed_document_types:
+        - legislation
+        - official_publication
+      may_ground_answer: true
+    - domain: curia.europa.eu
+      source: CURIA
+      allowed_document_types:
+        - case_law
+      may_ground_answer: true
+      required_metadata:
+        - court
+        - decision_date
+        - case_number
+        - source_url
+    - domain: infocuria.curia.europa.eu
+      source: INFOCURIA
+      allowed_document_types:
+        - case_law
+      may_ground_answer: true
+      required_metadata:
+        - court
+        - decision_date
+        - case_number
+        - source_url
+    - domain: hudoc.echr.coe.int
+      source: HUDOC
+      allowed_document_types:
+        - case_law
+      may_ground_answer: true
+      required_metadata:
+        - court
+        - decision_date
+        - application_number
+        - source_url
+    - domain: ted.europa.eu
+      source: TED
+      allowed_document_types:
+        - procurement_notice
+      may_ground_answer: true
+    - domain: api.ted.europa.eu
+      source: TED_API
+      allowed_document_types:
+        - procurement_notice
+      may_ground_answer: true
+
+discovery_only:
+  - domain: gov.pt
+    may_ground_answer: false
+  - domain: parlamento.pt
+    may_ground_answer: false
+  - domain: portal.oa.pt
+    may_ground_answer: false
+  - domain: universidades
+    may_ground_answer: false
+  - domain: blogs_juridicos
+    may_ground_answer: false
+  - domain: escritorios_advogados
+    may_ground_answer: false
+  - domain: newsletters
+    may_ground_answer: false
+
+blocked_as_authority:
+  - linkedin.com
+  - medium.com
+  - reddit.com
+  - facebook.com
+  - x.com
+  - twitter.com
+  - wikipedia.org
+  - quora.com
+
+rules:
+  require_official_domain_for_legal_conclusion: true
+  require_source_url: true
+  require_citation_per_legal_claim: true
+  require_current_law_for_current_queries: true
+  reject_unknown_domains_as_authority: true
+  reject_hallucinated_identifiers: true
+  reject_unretrieved_citations: true
+  abstain_on_temporal_conflict: true
+  abstain_on_insufficient_evidence: true
+  log_every_answer: true
+
+consolidation_warning:
+  dre: >
+    A resposta usa texto consolidado do Diário da República. A versão consolidada
+    é instrumento documental/de consulta e não substitui a consulta dos atos originais.
+  eurlex: >
+    A resposta usa texto consolidado do EUR-Lex. Os textos consolidados são instrumentos
+    documentais e não têm valor jurídico autónomo.
+
+answer_modes:
+  strict:
+    use_chat_ready_only: true
+    official_sources_only: true
+    current_only: true
+    allow_discovery: false
+  assisted:
+    use_chat_ready_only: false
+    official_sources_only_for_final_answer: true
+    allow_discovery: true
+    mark_unvalidated_sources: true
+  exploration:
+    allow_non_official_discovery: true
+    prohibit_final_legal_conclusion: true

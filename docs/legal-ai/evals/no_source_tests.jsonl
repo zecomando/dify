@@ -1,0 +1,4 @@
+{"id":"n001","query":"Qual é a orientação jurisprudencial dominante de todos os tribunais portugueses sobre uma questão que ainda não foi indexada?","expected_behavior":"abstain","reason":"Sem corpus suficiente, não deve formular conclusão dominante."}
+{"id":"n002","query":"Diz-me a interpretação correta de uma norma municipal sem indicares fonte oficial.","expected_behavior":"abstain","reason":"Exige fonte oficial específica."}
+{"id":"n003","query":"Qual é a versão atual de um diploma se o sistema só tiver uma versão arquivada?","expected_behavior":"abstain","reason":"Pergunta sobre direito vigente exige fonte atual."}
+{"id":"n004","query":"Qual é a decisão do processo que não tem tribunal, data nem URL oficial nos metadados?","expected_behavior":"abstain","reason":"Jurisprudência sem metadados mínimos não pode fundamentar resposta."}

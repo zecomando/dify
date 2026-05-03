@@ -1,0 +1,44 @@
+case_law_seed:
+  per_area:
+    minimum: 3
+    ideal: 10
+    strong_mvp: 20
+
+  priorities:
+    - acórdãos uniformizadores
+    - Supremo Tribunal de Justiça
+    - Supremo Tribunal Administrativo
+    - Tribunal Constitucional
+    - Tribunais Centrais Administrativos
+    - Relações
+    - Tribunal de Justiça da União Europeia
+    - Tribunal Europeu dos Direitos Humanos
+
+  queries:
+    contratacao_publica:
+      - exclusão de propostas Código dos Contratos Públicos artigo 70
+      - preço anormalmente baixo contratação pública pedido esclarecimentos
+      - proposta variante requisitos técnicos concurso público
+      - adjudicação critérios de avaliação CCP
+      - impugnação ato adjudicação contencioso pré-contratual
+
+    administrativo:
+      - audiência prévia ato administrativo Código do Procedimento Administrativo
+      - fundamentação ato administrativo invalidade anulabilidade
+      - discricionariedade administrativa controlo jurisdicional
+      - procedimento administrativo interessados audiência prévia
+
+    protecao_dados:
+      - RGPD tratamento dados pessoais consentimento interesse legítimo
+      - CNPD dados pessoais trabalhadores videovigilância
+      - direito apagamento dados pessoais RGPD
+
+    laboral:
+      - despedimento justa causa ónus da prova
+      - contrato trabalho presunção laboral
+      - assédio moral laboral indemnização
+
+    fiscal:
+      - fundamentação liquidação tributária LGT
+      - caducidade direito liquidação imposto
+      - impugnação judicial tributária ónus prova

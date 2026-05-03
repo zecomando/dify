@@ -1,0 +1,61 @@
+eu_seed:
+  treaties:
+    - title: Tratado da União Europeia
+      source: EURLEX
+      priority: p0
+    - title: Tratado sobre o Funcionamento da União Europeia
+      source: EURLEX
+      priority: p0
+    - title: Carta dos Direitos Fundamentais da União Europeia
+      source: EURLEX
+      priority: p0
+
+  data_and_digital:
+    - title: Regulamento Geral sobre a Proteção de Dados
+      source: EURLEX
+      priority: p0
+    - title: Artificial Intelligence Act
+      source: EURLEX
+      priority: p1
+    - title: Digital Services Act
+      source: EURLEX
+      priority: p1
+    - title: Digital Markets Act
+      source: EURLEX
+      priority: p1
+    - title: NIS2 Directive
+      source: EURLEX
+      priority: p1
+
+  procurement:
+    - title: Diretiva 2014/24/UE
+      source: EURLEX
+      priority: p0
+    - title: Diretiva 2014/25/UE
+      source: EURLEX
+      priority: p0
+    - title: Diretiva 2014/23/UE
+      source: EURLEX
+      priority: p0
+    - title: Diretiva 2009/81/CE
+      source: EURLEX
+      priority: p1
+
+  private_international_law:
+    - title: Regulamento Roma I
+      source: EURLEX
+      priority: p1
+    - title: Regulamento Roma II
+      source: EURLEX
+      priority: p1
+    - title: Regulamento Bruxelas I bis
+      source: EURLEX
+      priority: p1
+
+  consumers_and_labor:
+    - title: Diretivas de consumidores nucleares
+      source: EURLEX
+      priority: p2
+    - title: Diretivas laborais nucleares
+      source: EURLEX
+      priority: p2

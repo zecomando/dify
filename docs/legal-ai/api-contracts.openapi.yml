@@ -1,0 +1,1364 @@
+openapi: 3.1.0
+info:
+  title: Legal Engine API
+  version: 0.1.0
+  description: API contract for the legal evidence, retrieval, validation and ingestion engine.
+servers:
+  - url: https://legal-engine.example.com
+    description: Production
+  - url: http://localhost:8000
+    description: Local development
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  source_policy_name:
+                    type: string
+                  source_policy_version:
+                    type: integer
+  /source-policy/check-url:
+    post:
+      summary: Check URL against the legal source policy
+      operationId: checkSourcePolicyUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourcePolicyCheckRequest"
+      responses:
+        "200":
+          description: Source policy classification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourcePolicyCheckResult"
+  /query/classify:
+    post:
+      summary: Classify legal query
+      operationId: classifyQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassifyQueryRequest"
+      responses:
+        "200":
+          description: Classification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassifyQueryResponse"
+  /retrieval/search:
+    post:
+      summary: Search legal corpus
+      operationId: searchRetrieval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrievalSearchRequest"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetrievalSearchResponse"
+  /retrieval/rerank:
+    post:
+      summary: Rerank candidate chunks
+      operationId: rerankRetrieval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RerankRequest"
+      responses:
+        "200":
+          description: Reranked results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RerankResponse"
+  /evidence/build:
+    post:
+      summary: Build evidence package for generation
+      operationId: buildEvidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvidenceBuildRequest"
+      responses:
+        "200":
+          description: Evidence package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceBuildResponse"
+  /answer/generate:
+    post:
+      summary: Generate draft answer from evidence
+      operationId: generateAnswer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerGenerateRequest"
+      responses:
+        "200":
+          description: Draft answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerGenerateResponse"
+  /answer/validate:
+    post:
+      summary: Validate draft answer against evidence
+      operationId: validateAnswer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerValidateRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerValidateResponse"
+  /chat/answer:
+    post:
+      summary: Execute the orchestrated source-grounded chat answer pipeline
+      operationId: answerChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatAnswerRequest"
+      responses:
+        "200":
+          description: Final guarded answer with evidence, verdict and audit identifier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatAnswerResponse"
+  /ingestion/source:
+    post:
+      summary: Ingest source document or official URL
+      operationId: ingestSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestionSourceRequest"
+      responses:
+        "202":
+          description: Ingestion job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionJobResponse"
+  /ingestion/crawl-url:
+    post:
+      summary: Crawl URL before ingestion
+      operationId: crawlUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrawlUrlRequest"
+      responses:
+        "202":
+          description: Crawl job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionJobResponse"
+  /ingestion/promote:
+    post:
+      summary: Promote validated document to chat_ready
+      operationId: promoteDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoteDocumentRequest"
+      responses:
+        "200":
+          description: Promotion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoteDocumentResponse"
+  /admin/reindex:
+    post:
+      summary: Reindex corpus or subset
+      operationId: reindexCorpus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReindexRequest"
+      responses:
+        "202":
+          description: Reindex job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionJobResponse"
+  /admin/documents:
+    get:
+      summary: List legal documents for admin review
+      operationId: listLegalDocuments
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_review, chat_ready, rejected, archived]
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: jurisdiction
+          in: query
+          schema:
+            type: string
+        - name: document_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Legal document list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDocumentListResponse"
+  /admin/documents/{document_id}:
+    get:
+      summary: Retrieve a legal document
+      operationId: getLegalDocument
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Legal document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDocumentResponse"
+        "404":
+          description: Document not found
+  /admin/documents/{document_id}/chunks:
+    get:
+      summary: List chunks for a legal document
+      operationId: listLegalDocumentChunks
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Legal document chunks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalChunkListResponse"
+        "404":
+          description: Document not found
+  /admin/documents/{document_id}/status:
+    post:
+      summary: Update legal document status
+      operationId: updateLegalDocumentStatus
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminDocumentStatusRequest"
+      responses:
+        "200":
+          description: Updated legal document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDocumentStatusResponse"
+        "404":
+          description: Document not found
+  /admin/audits:
+    get:
+      summary: List answer audit summaries
+      operationId: listAnswerAudits
+      parameters:
+        - name: verdict
+          in: query
+          schema:
+            type: string
+            enum: [pass, abstain, fail]
+        - name: session_id
+          in: query
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Answer audit summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerAuditListResponse"
+  /admin/audit/{answer_id}:
+    get:
+      summary: Retrieve answer audit
+      operationId: getAnswerAudit
+      parameters:
+        - name: answer_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Audit record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerAudit"
+        "404":
+          description: Audit record not found
+  /admin/evaluation/run:
+    post:
+      summary: Run deterministic evaluation quality gates and persist the run
+      operationId: runEvaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationRunRequest"
+      responses:
+        "200":
+          description: Persisted evaluation run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationRunResponse"
+  /admin/evaluation/runs:
+    get:
+      summary: List persisted evaluation runs
+      operationId: listEvaluationRuns
+      parameters:
+        - name: passed
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Evaluation run summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationRunListResponse"
+  /admin/evaluation/runs/{run_id}:
+    get:
+      summary: Retrieve a persisted evaluation run
+      operationId: getEvaluationRun
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Persisted evaluation run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationRunResponse"
+        "404":
+          description: Evaluation run not found
+components:
+  schemas:
+    SourcePolicyCheckRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+    SourcePolicyAuthority:
+      type: object
+      properties:
+        jurisdiction:
+          type: string
+        source:
+          type: string
+        domain:
+          type: string
+        allowed_document_types:
+          type: array
+          items:
+            type: string
+        may_ground_answer:
+          type: boolean
+        requires_consolidation_warning:
+          type: boolean
+        required_metadata:
+          type: array
+          items:
+            type: string
+        required_identifiers_any:
+          type: array
+          items:
+            type: string
+    SourcePolicyCheckResult:
+      type: object
+      required:
+        - status
+        - may_ground_answer
+        - reason
+      properties:
+        status:
+          type: string
+          enum: [official_authority, discovery_only, blocked, unknown_domain, invalid_url]
+        domain:
+          type: string
+        may_ground_answer:
+          type: boolean
+        reason:
+          type: string
+        authority:
+          $ref: "#/components/schemas/SourcePolicyAuthority"
+    ClassifyQueryRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        mode:
+          type: string
+          enum: [strict, assisted, exploration]
+          default: strict
+    ClassifyQueryResponse:
+      type: object
+      required:
+        - jurisdiction
+        - area
+        - document_types
+        - current_only
+      properties:
+        jurisdiction:
+          type: array
+          items:
+            type: string
+        area:
+          type: array
+          items:
+            type: string
+        document_types:
+          type: array
+          items:
+            type: string
+        current_only:
+          type: boolean
+        requires_case_law:
+          type: boolean
+        requires_procurement_data:
+          type: boolean
+        high_risk:
+          type: boolean
+        query_rewrite:
+          type: string
+    RetrievalSearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        jurisdiction:
+          type: array
+          items:
+            type: string
+        area:
+          type: array
+          items:
+            type: string
+        document_types:
+          type: array
+          items:
+            type: string
+        current_only:
+          type: boolean
+          default: true
+        top_k_dense:
+          type: integer
+          default: 40
+        top_k_sparse:
+          type: integer
+          default: 40
+        mode:
+          type: string
+          enum: [strict, assisted, exploration]
+          default: strict
+    RetrievalSearchResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+    RetrievalResult:
+      type: object
+      required:
+        - chunk_id
+        - document_id
+        - source
+        - source_url
+        - text
+        - score
+      properties:
+        chunk_id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+        jurisdiction:
+          type: string
+        document_type:
+          type: string
+        citation_label:
+          type: string
+        source_url:
+          type: string
+          format: uri
+        is_current:
+          type: boolean
+        is_consolidated:
+          type: boolean
+        text:
+          type: string
+        score:
+          type: number
+    RerankRequest:
+      type: object
+      required:
+        - query
+        - results
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+        top_n:
+          type: integer
+          default: 12
+    RerankResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+    EvidenceBuildRequest:
+      type: object
+      required:
+        - query
+        - results
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+    EvidenceBuildResponse:
+      type: object
+      required:
+        - evidence
+        - warnings
+      properties:
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        warnings:
+          type: array
+          items:
+            type: string
+    EvidenceItem:
+      type: object
+      required:
+        - chunk_id
+        - citation_label
+        - text
+        - source_url
+      properties:
+        chunk_id:
+          type: string
+          format: uuid
+        citation_label:
+          type: string
+        source:
+          type: string
+        source_url:
+          type: string
+          format: uri
+        is_current:
+          type: boolean
+        is_consolidated:
+          type: boolean
+        legal_value_warning:
+          type: string
+        text:
+          type: string
+    AnswerGenerateRequest:
+      type: object
+      required:
+        - question
+        - evidence
+      properties:
+        question:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        mode:
+          type: string
+          enum: [strict, assisted, exploration]
+          default: strict
+    AnswerGenerateResponse:
+      type: object
+      required:
+        - draft_answer
+      properties:
+        draft_answer:
+          type: string
+    AnswerValidateRequest:
+      type: object
+      required:
+        - question
+        - draft_answer
+        - evidence
+      properties:
+        question:
+          type: string
+        draft_answer:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+    AnswerValidateResponse:
+      type: object
+      required:
+        - verdict
+        - final_safe_answer
+      properties:
+        verdict:
+          type: string
+          enum: [pass, abstain, fail]
+        unsupported_claims:
+          type: array
+          items:
+            type: string
+        missing_citations:
+          type: array
+          items:
+            type: string
+        wrong_version_risk:
+          type: boolean
+        hallucinated_identifiers:
+          type: array
+          items:
+            type: string
+        final_safe_answer:
+          type: string
+    PipelineStepTrace:
+      type: object
+      required:
+        - step
+        - status
+      properties:
+        step:
+          type: string
+        status:
+          type: string
+        detail:
+          type: string
+    ChatAnswerRequest:
+      type: object
+      required:
+        - question
+      properties:
+        question:
+          type: string
+        session_id:
+          type: string
+        user_id:
+          type: string
+        mode:
+          type: string
+          enum: [strict, assisted, exploration]
+          default: strict
+        jurisdiction:
+          type: array
+          items:
+            type: string
+        document_types:
+          type: array
+          items:
+            type: string
+        current_only:
+          type: boolean
+        top_k_dense:
+          type: integer
+          default: 40
+        top_k_sparse:
+          type: integer
+          default: 40
+        top_n:
+          type: integer
+          default: 8
+    ChatAnswerResponse:
+      type: object
+      required:
+        - answer
+        - verdict
+        - classification
+        - evidence
+      properties:
+        audit_id:
+          type: string
+          format: uuid
+        answer:
+          type: string
+        verdict:
+          type: string
+          enum: [pass, abstain, fail]
+        classification:
+          $ref: "#/components/schemas/ClassifyQueryResponse"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        warnings:
+          type: array
+          items:
+            type: string
+        retrieved_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+        reranked_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+        unsupported_claims:
+          type: array
+          items:
+            type: string
+        missing_citations:
+          type: array
+          items:
+            type: string
+        wrong_version_risk:
+          type: boolean
+        hallucinated_identifiers:
+          type: array
+          items:
+            type: string
+        pipeline_trace:
+          type: array
+          items:
+            $ref: "#/components/schemas/PipelineStepTrace"
+    IngestionSourceRequest:
+      type: object
+      required:
+        - source_url
+      properties:
+        source_url:
+          type: string
+          format: uri
+        raw_text:
+          type: string
+        source:
+          type: string
+        jurisdiction:
+          type: string
+        document_type:
+          type: string
+        area:
+          type: array
+          items:
+            type: string
+        promote_if_valid:
+          type: boolean
+          default: false
+    CrawlUrlRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+        limit:
+          type: integer
+          default: 1
+        only_main_content:
+          type: boolean
+          default: true
+    PromoteDocumentRequest:
+      type: object
+      required:
+        - document_id
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        target_status:
+          type: string
+          default: chat_ready
+    PromoteDocumentResponse:
+      type: object
+      required:
+        - document_id
+        - status
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+    ReindexRequest:
+      type: object
+      properties:
+        document_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        source:
+          type: string
+        jurisdiction:
+          type: string
+        force:
+          type: boolean
+          default: false
+    IngestionJobResponse:
+      type: object
+      required:
+        - job_id
+        - status
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+    LegalDocumentResponse:
+      type: object
+      required:
+        - id
+        - source
+        - jurisdiction
+        - document_type
+        - title
+        - source_url
+        - status
+        - sha256
+        - is_current
+        - is_consolidated
+        - legal_value_warning
+        - area
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+        jurisdiction:
+          type: string
+        document_type:
+          type: string
+        title:
+          type: string
+        source_url:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [pending_review, chat_ready, rejected, archived]
+        sha256:
+          type: string
+        is_current:
+          type: boolean
+        is_consolidated:
+          type: boolean
+        legal_value_warning:
+          type: string
+        area:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    LegalDocumentListResponse:
+      type: object
+      required:
+        - documents
+        - total
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalDocumentResponse"
+        total:
+          type: integer
+    LegalChunkResponse:
+      type: object
+      required:
+        - id
+        - document_id
+        - chunk_type
+        - text_content
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        chunk_type:
+          type: string
+        structural_path:
+          type: string
+        citation_label:
+          type: string
+        text_content:
+          type: string
+        token_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    LegalChunkListResponse:
+      type: object
+      required:
+        - chunks
+        - total
+      properties:
+        chunks:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalChunkResponse"
+        total:
+          type: integer
+    AdminDocumentStatusRequest:
+      type: object
+      required:
+        - target_status
+      properties:
+        target_status:
+          type: string
+          enum: [pending_review, chat_ready, rejected, archived]
+    AdminDocumentStatusResponse:
+      type: object
+      required:
+        - document
+      properties:
+        document:
+          $ref: "#/components/schemas/LegalDocumentResponse"
+    AnswerAuditSummary:
+      type: object
+      required:
+        - id
+        - user_query
+        - verdict
+        - confidence
+        - abstained
+        - latency_ms
+        - estimated_cost_usd
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        user_id:
+          type: string
+        user_query:
+          type: string
+        verdict:
+          type: string
+          enum: [pass, abstain, fail]
+        confidence:
+          type: string
+        abstained:
+          type: boolean
+        latency_ms:
+          type: integer
+        estimated_cost_usd:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+    AnswerAuditListResponse:
+      type: object
+      required:
+        - audits
+        - total
+      properties:
+        audits:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerAuditSummary"
+        total:
+          type: integer
+    AnswerAudit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        user_id:
+          type: string
+        user_query:
+          type: string
+        normalized_query:
+          type: string
+        detected_area:
+          type: array
+          items:
+            type: string
+        detected_jurisdiction:
+          type: array
+          items:
+            type: string
+        detected_document_types:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [strict, assisted, exploration]
+        retrieved_chunks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+        reranked_chunks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalResult"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        draft_answer:
+          type: string
+        validator_report:
+          $ref: "#/components/schemas/AnswerValidateResponse"
+        final_answer:
+          type: string
+        confidence:
+          type: string
+        abstained:
+          type: boolean
+        verdict:
+          type: string
+          enum: [pass, abstain, fail]
+        model_generator:
+          type: string
+        model_validator:
+          type: string
+        embedding_model:
+          type: string
+        reranker_model:
+          type: string
+        latency_ms:
+          type: integer
+        estimated_cost_usd:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+    EvaluationRunRequest:
+      type: object
+      properties:
+        evals_dir:
+          type: string
+    EvaluationMetrics:
+      type: object
+      properties:
+        total_cases:
+          type: integer
+        successful_cases:
+          type: integer
+        failed_cases:
+          type: integer
+        benchmark_pass_rate:
+          type: number
+        source_precision:
+          type: number
+        official_domain_rate:
+          type: number
+        citation_coverage:
+          type: number
+        correct_abstention_on_no_source:
+          type: number
+        hallucination_guard_rate:
+          type: number
+        audit_coverage:
+          type: number
+        median_latency_ms:
+          type: integer
+    QualityGateResult:
+      type: object
+      required:
+        - name
+        - passed
+        - actual
+        - threshold
+      properties:
+        name:
+          type: string
+        passed:
+          type: boolean
+        actual:
+          type: number
+        threshold:
+          type: string
+    EvaluationCaseResult:
+      type: object
+      required:
+        - id
+        - dataset
+        - query
+        - expected_behavior
+        - verdict
+        - success
+        - latency_ms
+        - evidence_count
+      properties:
+        id:
+          type: string
+        dataset:
+          type: string
+        query:
+          type: string
+        expected_behavior:
+          type: string
+        verdict:
+          type: string
+          enum: [pass, abstain, fail]
+        success:
+          type: boolean
+        audit_id:
+          type: string
+          format: uuid
+        latency_ms:
+          type: integer
+        evidence_count:
+          type: integer
+        source_domains:
+          type: array
+          items:
+            type: string
+        missing_expected_domains:
+          type: array
+          items:
+            type: string
+        forbidden_identifier_found:
+          type: array
+          items:
+            type: string
+        failure_reason:
+          type: string
+    EvaluationRunSummary:
+      type: object
+      required:
+        - id
+        - passed
+        - total_cases
+        - successful_cases
+        - failed_cases_count
+        - evals_dir
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        passed:
+          type: boolean
+        total_cases:
+          type: integer
+        successful_cases:
+          type: integer
+        failed_cases_count:
+          type: integer
+        evals_dir:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    EvaluationRunListResponse:
+      type: object
+      required:
+        - runs
+        - total
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationRunSummary"
+        total:
+          type: integer
+    EvaluationRunResponse:
+      type: object
+      required:
+        - id
+        - passed
+        - total_cases
+        - successful_cases
+        - failed_cases_count
+        - metrics
+        - quality_gates
+        - failed_cases
+        - evals_dir
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        passed:
+          type: boolean
+        total_cases:
+          type: integer
+        successful_cases:
+          type: integer
+        failed_cases_count:
+          type: integer
+        metrics:
+          $ref: "#/components/schemas/EvaluationMetrics"
+        quality_gates:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityGateResult"
+        failed_cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationCaseResult"
+        evals_dir:
+          type: string
+        created_at:
+          type: string
+          format: date-time

@@ -1,0 +1,39 @@
+legal_areas:
+  - Constitucional
+  - Civil
+  - Processo Civil
+  - Penal
+  - Processo Penal
+  - Laboral
+  - Comercial e Societário
+  - Insolvência
+  - Administrativo
+  - Contratação Pública
+  - Fiscal
+  - Família e Menores
+  - Arrendamento
+  - Consumidor
+  - Proteção de Dados
+  - Propriedade Intelectual
+  - Urbanismo
+  - Ambiente
+  - Segurança Social
+  - Imigração e Nacionalidade
+  - União Europeia
+  - CEDH/TEDH
+
+priority_verticals:
+  mvp:
+    - Contratação Pública
+    - Administrativo
+    - União Europeia
+  beta:
+    - Civil
+    - Laboral
+    - Fiscal
+    - Proteção de Dados
+  later:
+    - Penal
+    - Família e Menores
+    - Urbanismo
+    - Ambiente
