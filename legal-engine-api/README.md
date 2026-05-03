@@ -29,6 +29,8 @@ Set `LEGAL_ENGINE_DATABASE_PATH` to override the default SQLite path.
 
 Set `LEGAL_SOURCE_POLICY_PATH` to override the default policy path.
 
+Set `LEGAL_ENGINE_ADMIN_TOKEN` to protect all `/admin/*` endpoints with `X-Admin-Token`.
+
 ## API smoke checks
 
 ```bash
@@ -66,6 +68,7 @@ Run through the API:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/admin/evaluation/run \
+  -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{}"
 ```
@@ -73,7 +76,8 @@ curl -X POST http://127.0.0.1:8000/admin/evaluation/run \
 The API response includes the persisted evaluation run ID. Retrieve it with:
 
 ```bash
-curl http://127.0.0.1:8000/admin/evaluation/runs/<run_id>
+curl -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
+  http://127.0.0.1:8000/admin/evaluation/runs/<run_id>
 ```
 
 ## Docker
@@ -81,7 +85,23 @@ curl http://127.0.0.1:8000/admin/evaluation/runs/<run_id>
 Build and start locally from this directory:
 
 ```bash
+export LEGAL_ENGINE_ADMIN_TOKEN="change-me"
 docker compose up --build
 ```
 
-The compose file mounts `../docs/legal-ai` read-only and stores SQLite data in the `legal-engine-data` volume.
+The compose file mounts `../docs/legal-ai` read-only, stores SQLite data in the `legal-engine-data` volume, and requires `LEGAL_ENGINE_ADMIN_TOKEN`.
+
+## Initial ingestion smoke
+
+```bash
+curl -X POST http://127.0.0.1:8000/ingestion/source \
+  -H "Content-Type: application/json" \
+  -d '{"source_url":"https://dre.pt/dre/legislacao-consolidada/codigo-civil","raw_text":"Artigo 1.º\nA responsabilidade civil depende dos pressupostos legais.","promote_if_valid":true}'
+
+curl -X POST http://127.0.0.1:8000/chat/answer \
+  -H "Content-Type: application/json" \
+  -d '{"question":"responsabilidade civil"}'
+
+curl -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
+  http://127.0.0.1:8000/admin/documents
+```

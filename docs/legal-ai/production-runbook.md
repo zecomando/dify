@@ -31,6 +31,7 @@ Definir procedimentos operacionais para manter o serviço disponível, seguro, a
 - Confirmar migrations.
 - Confirmar source policy.
 - Confirmar `.env` de ambiente.
+- Confirmar `LEGAL_ENGINE_ADMIN_TOKEN` definido e guardado como secret do ambiente.
 - Confirmar backups recentes.
 
 ### Execução de deploy
@@ -56,7 +57,39 @@ Definir procedimentos operacionais para manter o serviço disponível, seguro, a
 - Pergunta que deve abster.
 - Pergunta com identificador falso.
 - Pergunta com fonte consolidada.
-- Consulta de audit record.
+- Consulta de audit record com `X-Admin-Token`.
+
+## Staging mínimo
+
+1. Definir `LEGAL_ENGINE_ADMIN_TOKEN` fora do repositório.
+2. Subir `legal-engine-api` com volume persistente para SQLite.
+3. Confirmar `GET /health`.
+4. Ingerir uma fonte oficial mínima.
+5. Confirmar `/admin/documents` com `X-Admin-Token`.
+6. Importar `docs/legal-ai/dify-chat-answer.yml` no Dify.
+7. Executar os smoke tests do chat no Dify.
+
+### Comandos de smoke
+
+```bash
+curl http://127.0.0.1:8000/health
+
+curl -X POST http://127.0.0.1:8000/ingestion/source \
+  -H "Content-Type: application/json" \
+  -d '{"source_url":"https://dre.pt/dre/legislacao-consolidada/codigo-civil","raw_text":"Artigo 1.º\nA responsabilidade civil depende dos pressupostos legais.","promote_if_valid":true}'
+
+curl -X POST http://127.0.0.1:8000/chat/answer \
+  -H "Content-Type: application/json" \
+  -d '{"question":"responsabilidade civil"}'
+
+curl -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
+  http://127.0.0.1:8000/admin/documents
+
+curl -X POST http://127.0.0.1:8000/admin/evaluation/run \
+  -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
 
 ## Backups
 

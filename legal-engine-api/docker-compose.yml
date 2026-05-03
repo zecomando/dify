@@ -7,6 +7,7 @@ services:
     environment:
       LEGAL_ENGINE_DATABASE_PATH: /data/legal_engine.sqlite3
       LEGAL_SOURCE_POLICY_PATH: /docs/legal-ai/source-policy.yml
+      LEGAL_ENGINE_ADMIN_TOKEN: ${LEGAL_ENGINE_ADMIN_TOKEN:?Set LEGAL_ENGINE_ADMIN_TOKEN before starting legal-engine-api}
     volumes:
       - legal-engine-data:/data
       - ../docs/legal-ai:/docs/legal-ai:ro

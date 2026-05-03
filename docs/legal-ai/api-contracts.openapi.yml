@@ -218,6 +218,8 @@ paths:
     post:
       summary: Reindex corpus or subset
       operationId: reindexCorpus
+      security:
+        - AdminTokenAuth: []
       requestBody:
         required: true
         content:
@@ -235,6 +237,8 @@ paths:
     get:
       summary: List legal documents for admin review
       operationId: listLegalDocuments
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: status
           in: query
@@ -277,6 +281,8 @@ paths:
     get:
       summary: Retrieve a legal document
       operationId: getLegalDocument
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: document_id
           in: path
@@ -297,6 +303,8 @@ paths:
     get:
       summary: List chunks for a legal document
       operationId: listLegalDocumentChunks
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: document_id
           in: path
@@ -317,6 +325,8 @@ paths:
     post:
       summary: Update legal document status
       operationId: updateLegalDocumentStatus
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: document_id
           in: path
@@ -343,6 +353,8 @@ paths:
     get:
       summary: List answer audit summaries
       operationId: listAnswerAudits
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: verdict
           in: query
@@ -381,6 +393,8 @@ paths:
     get:
       summary: Retrieve answer audit
       operationId: getAnswerAudit
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: answer_id
           in: path
@@ -401,6 +415,8 @@ paths:
     post:
       summary: Run deterministic evaluation quality gates and persist the run
       operationId: runEvaluation
+      security:
+        - AdminTokenAuth: []
       requestBody:
         required: true
         content:
@@ -418,6 +434,8 @@ paths:
     get:
       summary: List persisted evaluation runs
       operationId: listEvaluationRuns
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: passed
           in: query
@@ -447,6 +465,8 @@ paths:
     get:
       summary: Retrieve a persisted evaluation run
       operationId: getEvaluationRun
+      security:
+        - AdminTokenAuth: []
       parameters:
         - name: run_id
           in: path
@@ -464,6 +484,11 @@ paths:
         "404":
           description: Evaluation run not found
 components:
+  securitySchemes:
+    AdminTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
   schemas:
     SourcePolicyCheckRequest:
       type: object

@@ -1,7 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from secrets import compare_digest
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict
 
 from app.audit import answer_audit_to_response
@@ -73,6 +75,7 @@ from app.source_policy import (
 )
 
 router = APIRouter()
+admin_token_header = APIKeyHeader(name="X-Admin-Token", scheme_name="AdminTokenAuth", auto_error=False)
 
 
 class HealthResponse(BaseModel):
@@ -90,6 +93,17 @@ def get_source_policy() -> SourcePolicy:
 
 def get_repository() -> LegalRepository:
     return LegalRepository(get_settings().database_path)
+
+
+def require_admin_token(x_admin_token: str | None = Security(admin_token_header)) -> None:
+    admin_token = get_settings().admin_token
+    if admin_token is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin token is not configured.")
+    if x_admin_token is None or not compare_digest(x_admin_token, admin_token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token.")
+
+
+admin_dependencies = [Depends(require_admin_token)]
 
 
 def _legal_document_to_response(document: LegalDocumentRecord) -> LegalDocumentResponse:
@@ -216,7 +230,7 @@ def answer_legal_chat(
     return answer_chat(payload, source_policy, repository)
 
 
-@router.get("/admin/documents", response_model=LegalDocumentListResponse)
+@router.get("/admin/documents", response_model=LegalDocumentListResponse, dependencies=admin_dependencies)
 def list_legal_documents(
     status_filter: DocumentStatus | None = Query(default=None, alias="status"),
     source: str | None = None,
@@ -247,7 +261,7 @@ def list_legal_documents(
     )
 
 
-@router.get("/admin/documents/{document_id}", response_model=LegalDocumentResponse)
+@router.get("/admin/documents/{document_id}", response_model=LegalDocumentResponse, dependencies=admin_dependencies)
 def get_legal_document(
     document_id: str,
     repository: LegalRepository = Depends(get_repository),
@@ -258,7 +272,11 @@ def get_legal_document(
     return _legal_document_to_response(document)
 
 
-@router.get("/admin/documents/{document_id}/chunks", response_model=LegalChunkListResponse)
+@router.get(
+    "/admin/documents/{document_id}/chunks",
+    response_model=LegalChunkListResponse,
+    dependencies=admin_dependencies,
+)
 def list_legal_document_chunks(
     document_id: str,
     repository: LegalRepository = Depends(get_repository),
@@ -273,7 +291,11 @@ def list_legal_document_chunks(
     )
 
 
-@router.post("/admin/documents/{document_id}/status", response_model=AdminDocumentStatusResponse)
+@router.post(
+    "/admin/documents/{document_id}/status",
+    response_model=AdminDocumentStatusResponse,
+    dependencies=admin_dependencies,
+)
 def update_legal_document_status(
     document_id: str,
     payload: AdminDocumentStatusRequest,
@@ -285,7 +307,7 @@ def update_legal_document_status(
     return AdminDocumentStatusResponse(document=_legal_document_to_response(document))
 
 
-@router.get("/admin/audits", response_model=AnswerAuditListResponse)
+@router.get("/admin/audits", response_model=AnswerAuditListResponse, dependencies=admin_dependencies)
 def list_answer_audits(
     verdict: ValidatorVerdict | None = None,
     session_id: str | None = None,
@@ -313,7 +335,7 @@ def list_answer_audits(
     )
 
 
-@router.get("/admin/audit/{answer_id}", response_model=AnswerAuditResponse)
+@router.get("/admin/audit/{answer_id}", response_model=AnswerAuditResponse, dependencies=admin_dependencies)
 def get_answer_audit(
     answer_id: str,
     repository: LegalRepository = Depends(get_repository),
@@ -324,7 +346,7 @@ def get_answer_audit(
     return answer_audit_to_response(audit)
 
 
-@router.post("/admin/evaluation/run", response_model=EvaluationRunResponse)
+@router.post("/admin/evaluation/run", response_model=EvaluationRunResponse, dependencies=admin_dependencies)
 def run_legal_evaluation(
     payload: EvaluationRunRequest,
     repository: LegalRepository = Depends(get_repository),
@@ -337,7 +359,7 @@ def run_legal_evaluation(
     )
 
 
-@router.get("/admin/evaluation/runs", response_model=EvaluationRunListResponse)
+@router.get("/admin/evaluation/runs", response_model=EvaluationRunListResponse, dependencies=admin_dependencies)
 def list_legal_evaluation_runs(
     passed: bool | None = None,
     limit: int = Query(default=50, ge=1, le=200),
@@ -352,7 +374,7 @@ def list_legal_evaluation_runs(
     )
 
 
-@router.get("/admin/evaluation/runs/{run_id}", response_model=EvaluationRunResponse)
+@router.get("/admin/evaluation/runs/{run_id}", response_model=EvaluationRunResponse, dependencies=admin_dependencies)
 def get_legal_evaluation_run(
     run_id: str,
     repository: LegalRepository = Depends(get_repository),
@@ -392,7 +414,12 @@ def promote_legal_document(
     return response
 
 
-@router.post("/admin/reindex", response_model=IngestionJobResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/admin/reindex",
+    response_model=IngestionJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=admin_dependencies,
+)
 def reindex_legal_corpus(
     payload: ReindexRequest,
     repository: LegalRepository = Depends(get_repository),

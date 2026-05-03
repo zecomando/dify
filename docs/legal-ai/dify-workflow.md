@@ -66,6 +66,8 @@ http://legal-engine-api:8000/chat/answer
 }
 ```
 
+O workflow Dify não usa `X-Admin-Token`, porque chama apenas `/chat/answer`. O token é obrigatório só para endpoints `/admin/*`, usados em operação, auditoria e avaliação.
+
 ## Output esperado de `/chat/answer`
 
 O Dify deve tratar estes campos como canónicos:

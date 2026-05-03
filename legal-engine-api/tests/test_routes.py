@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes import get_repository
+from app.config import get_settings
 from app.ingestion import ingest_source
 from app.main import app
 from app.repository import LegalRepository
@@ -12,6 +14,16 @@ from app.source_policy import SourcePolicy, SourcePolicyStatus
 
 client = TestClient(app)
 POLICY_PATH = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "source-policy.yml"
+ADMIN_TOKEN = "test-admin-token"
+ADMIN_HEADERS = {"X-Admin-Token": ADMIN_TOKEN}
+
+
+@pytest.fixture(autouse=True)
+def configure_admin_token(monkeypatch):
+    monkeypatch.setenv("LEGAL_ENGINE_ADMIN_TOKEN", ADMIN_TOKEN)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def test_health_endpoint_returns_policy_metadata():
@@ -232,7 +244,7 @@ def test_chat_answer_endpoint_returns_validated_answer_from_persisted_chunks(tmp
         )
         assert response.status_code == 200
         payload = response.json()
-        audit_response = client.get(f"/admin/audit/{payload['audit_id']}")
+        audit_response = client.get(f"/admin/audit/{payload['audit_id']}", headers=ADMIN_HEADERS)
     finally:
         app.dependency_overrides.clear()
 
@@ -265,13 +277,18 @@ def test_admin_document_endpoints_list_get_chunks_and_update_status(tmp_path):
     app.dependency_overrides[get_repository] = lambda: repository
 
     try:
-        list_response = client.get("/admin/documents")
-        filtered_response = client.get("/admin/documents", params={"status": "pending_review"})
-        get_response = client.get(f"/admin/documents/{job.document_id}")
-        chunks_response = client.get(f"/admin/documents/{job.document_id}/chunks")
+        list_response = client.get("/admin/documents", headers=ADMIN_HEADERS)
+        filtered_response = client.get(
+            "/admin/documents",
+            params={"status": "pending_review"},
+            headers=ADMIN_HEADERS,
+        )
+        get_response = client.get(f"/admin/documents/{job.document_id}", headers=ADMIN_HEADERS)
+        chunks_response = client.get(f"/admin/documents/{job.document_id}/chunks", headers=ADMIN_HEADERS)
         status_response = client.post(
             f"/admin/documents/{job.document_id}/status",
             json={"target_status": "rejected"},
+            headers=ADMIN_HEADERS,
         )
     finally:
         app.dependency_overrides.clear()
@@ -295,11 +312,12 @@ def test_admin_document_endpoints_return_404_for_missing_document(tmp_path):
     app.dependency_overrides[get_repository] = lambda: repository
 
     try:
-        get_response = client.get("/admin/documents/missing-document")
-        chunks_response = client.get("/admin/documents/missing-document/chunks")
+        get_response = client.get("/admin/documents/missing-document", headers=ADMIN_HEADERS)
+        chunks_response = client.get("/admin/documents/missing-document/chunks", headers=ADMIN_HEADERS)
         status_response = client.post(
             "/admin/documents/missing-document/status",
             json={"target_status": "archived"},
+            headers=ADMIN_HEADERS,
         )
     finally:
         app.dependency_overrides.clear()
@@ -338,8 +356,12 @@ def test_admin_audits_endpoint_lists_and_filters_answer_audits(tmp_path):
             json={"question": "responsabilidade civil", "session_id": "session-2", "user_id": "user-2"},
         )
         assert answer_response.status_code == 200
-        list_response = client.get("/admin/audits")
-        filtered_response = client.get("/admin/audits", params={"verdict": "abstain", "session_id": "session-2"})
+        list_response = client.get("/admin/audits", headers=ADMIN_HEADERS)
+        filtered_response = client.get(
+            "/admin/audits",
+            params={"verdict": "abstain", "session_id": "session-2"},
+            headers=ADMIN_HEADERS,
+        )
     finally:
         app.dependency_overrides.clear()
 
@@ -357,7 +379,7 @@ def test_admin_audit_endpoint_returns_404_for_missing_audit(tmp_path):
     app.dependency_overrides[get_repository] = lambda: repository
 
     try:
-        response = client.get("/admin/audit/missing-audit")
+        response = client.get("/admin/audit/missing-audit", headers=ADMIN_HEADERS)
     finally:
         app.dependency_overrides.clear()
 
@@ -384,11 +406,11 @@ def test_admin_evaluation_run_endpoint_persists_and_returns_run(tmp_path):
     app.dependency_overrides[get_repository] = lambda: repository
 
     try:
-        response = client.post("/admin/evaluation/run", json={"evals_dir": str(evals_dir)})
+        response = client.post("/admin/evaluation/run", json={"evals_dir": str(evals_dir)}, headers=ADMIN_HEADERS)
         assert response.status_code == 200
         payload = response.json()
-        list_response = client.get("/admin/evaluation/runs", params={"passed": "true"})
-        get_response = client.get(f"/admin/evaluation/runs/{payload['id']}")
+        list_response = client.get("/admin/evaluation/runs", params={"passed": "true"}, headers=ADMIN_HEADERS)
+        get_response = client.get(f"/admin/evaluation/runs/{payload['id']}", headers=ADMIN_HEADERS)
     finally:
         app.dependency_overrides.clear()
 
@@ -407,18 +429,31 @@ def test_admin_evaluation_run_endpoint_returns_404_for_missing_run(tmp_path):
     app.dependency_overrides[get_repository] = lambda: repository
 
     try:
-        response = client.get("/admin/evaluation/runs/missing-run")
+        response = client.get("/admin/evaluation/runs/missing-run", headers=ADMIN_HEADERS)
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
 
 
+def test_admin_endpoints_require_configured_valid_token(monkeypatch):
+    missing_header_response = client.get("/admin/documents")
+    invalid_header_response = client.get("/admin/documents", headers={"X-Admin-Token": "wrong-token"})
+    monkeypatch.delenv("LEGAL_ENGINE_ADMIN_TOKEN")
+    get_settings.cache_clear()
+    unconfigured_response = client.get("/admin/documents", headers=ADMIN_HEADERS)
+
+    assert missing_header_response.status_code == 401
+    assert invalid_header_response.status_code == 401
+    assert unconfigured_response.status_code == 503
+
+
 def test_openapi_smoke_includes_chat_and_admin_endpoints():
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
-    paths = response.json()["paths"]
+    payload = response.json()
+    paths = payload["paths"]
     assert "/chat/answer" in paths
     assert "/admin/documents" in paths
     assert "/admin/documents/{document_id}" in paths
@@ -427,3 +462,10 @@ def test_openapi_smoke_includes_chat_and_admin_endpoints():
     assert "/admin/audits" in paths
     assert "/admin/evaluation/run" in paths
     assert "/admin/evaluation/runs" in paths
+    assert payload["components"]["securitySchemes"]["AdminTokenAuth"] == {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Admin-Token",
+    }
+    assert paths["/admin/documents"]["get"]["security"] == [{"AdminTokenAuth": []}]
+    assert "security" not in paths["/chat/answer"]["post"]
