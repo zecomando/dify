@@ -1447,22 +1447,29 @@ class LegalRepository:
             ).fetchone()
         return int(row[0]) if row is not None else 0
 
-    def promote_document(self, document_id: str, target_status: str) -> LegalDocumentRecord | None:
+    def promote_document(
+        self,
+        document_id: str,
+        target_status: str,
+        *,
+        change_note: str = "",
+    ) -> LegalDocumentRecord | None:
         existing_document = self.get_document(document_id)
         if existing_document is None:
             return None
 
         updated_at = utc_now_iso()
         archived_at = updated_at if target_status == "archived" else existing_document.archived_at
-        is_current = False if target_status == "archived" else existing_document.is_current
+        is_current = False if target_status in {"archived", "rejected"} else existing_document.is_current
+        resolved_change_note = change_note or existing_document.change_note
         with self._connect() as connection:
             connection.execute(
                 """
                 UPDATE legal_documents
-                SET status = ?, is_current = ?, archived_at = ?, updated_at = ?
+                SET status = ?, is_current = ?, archived_at = ?, change_note = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (target_status, int(is_current), archived_at, updated_at, document_id),
+                (target_status, int(is_current), archived_at, resolved_change_note, updated_at, document_id),
             )
         return self.get_document(document_id)
 

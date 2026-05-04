@@ -266,7 +266,11 @@ def promote_document(
                 or violations
             ):
                 return PromoteDocumentResponse(document_id=document.id, status=document.status)
-    document = repository.promote_document(payload.document_id, payload.target_status)
+    document = repository.promote_document(
+        payload.document_id,
+        payload.target_status,
+        change_note=payload.change_note,
+    )
     if document is None:
         return None
     return PromoteDocumentResponse(document_id=document.id, status=document.status)

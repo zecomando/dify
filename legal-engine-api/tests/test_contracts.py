@@ -45,6 +45,22 @@ def test_openapi_contract_includes_admin_ingestion_jobs_endpoints():
     assert "IngestionJobDetailResponse" in schemas
 
 
+def test_openapi_contract_includes_admin_document_review_helpers():
+    contract = _openapi_contract()
+    paths = contract["paths"]
+    schemas = contract["components"]["schemas"]
+
+    assert "/admin/documents/{document_id}/raw-text" in paths
+    assert paths["/admin/documents/{document_id}/raw-text"]["get"]["security"] == [{"AdminTokenAuth": []}]
+    raw_text_schema = paths["/admin/documents/{document_id}/raw-text"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert raw_text_schema["$ref"] == "#/components/schemas/LegalDocumentRawTextResponse"
+    assert "LegalDocumentRawTextResponse" in schemas
+    assert "change_note" in schemas["AdminDocumentStatusRequest"]["properties"]
+    assert "change_note" in schemas["LegalDocumentResponse"]["properties"]
+
+
 def test_openapi_contract_exposes_legal_metadata_in_core_models():
     schemas = _openapi_contract()["components"]["schemas"]
 

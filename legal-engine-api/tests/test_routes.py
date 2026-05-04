@@ -285,9 +285,10 @@ def test_admin_document_endpoints_list_get_chunks_and_update_status(tmp_path):
         )
         get_response = client.get(f"/admin/documents/{job.document_id}", headers=ADMIN_HEADERS)
         chunks_response = client.get(f"/admin/documents/{job.document_id}/chunks", headers=ADMIN_HEADERS)
+        raw_text_response = client.get(f"/admin/documents/{job.document_id}/raw-text", headers=ADMIN_HEADERS)
         status_response = client.post(
             f"/admin/documents/{job.document_id}/status",
-            json={"target_status": "rejected"},
+            json={"target_status": "rejected", "change_note": "Rejected during human legal review."},
             headers=ADMIN_HEADERS,
         )
     finally:
@@ -303,8 +304,14 @@ def test_admin_document_endpoints_list_get_chunks_and_update_status(tmp_path):
     assert chunks_response.status_code == 200
     assert chunks_response.json()["total"] == 1
     assert chunks_response.json()["chunks"][0]["citation_label"] == "Artigo 1.º"
+    assert raw_text_response.status_code == 200
+    assert (
+        raw_text_response.json()["raw_text"] == "Artigo 1.º\nA responsabilidade civil depende dos pressupostos legais."
+    )
     assert status_response.status_code == 200
     assert status_response.json()["document"]["status"] == "rejected"
+    assert status_response.json()["document"]["is_current"] is False
+    assert status_response.json()["document"]["change_note"] == "Rejected during human legal review."
 
 
 def test_admin_document_endpoints_return_404_for_missing_document(tmp_path):
@@ -314,6 +321,7 @@ def test_admin_document_endpoints_return_404_for_missing_document(tmp_path):
     try:
         get_response = client.get("/admin/documents/missing-document", headers=ADMIN_HEADERS)
         chunks_response = client.get("/admin/documents/missing-document/chunks", headers=ADMIN_HEADERS)
+        raw_text_response = client.get("/admin/documents/missing-document/raw-text", headers=ADMIN_HEADERS)
         status_response = client.post(
             "/admin/documents/missing-document/status",
             json={"target_status": "archived"},
@@ -324,6 +332,7 @@ def test_admin_document_endpoints_return_404_for_missing_document(tmp_path):
 
     assert get_response.status_code == 404
     assert chunks_response.status_code == 404
+    assert raw_text_response.status_code == 404
     assert status_response.status_code == 404
 
 
@@ -625,6 +634,7 @@ def test_openapi_smoke_includes_chat_and_admin_endpoints():
     assert "/admin/documents" in paths
     assert "/admin/documents/{document_id}" in paths
     assert "/admin/documents/{document_id}/chunks" in paths
+    assert "/admin/documents/{document_id}/raw-text" in paths
     assert "/admin/documents/{document_id}/status" in paths
     assert "/admin/audits" in paths
     assert "/admin/corpus/seed" in paths

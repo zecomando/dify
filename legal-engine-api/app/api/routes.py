@@ -72,6 +72,7 @@ from app.schemas import (
     LegalChunkListResponse,
     LegalChunkResponse,
     LegalDocumentListResponse,
+    LegalDocumentRawTextResponse,
     LegalDocumentResponse,
     PromoteDocumentRequest,
     PromoteDocumentResponse,
@@ -424,6 +425,24 @@ def list_legal_document_chunks(
     )
 
 
+@router.get(
+    "/admin/documents/{document_id}/raw-text",
+    response_model=LegalDocumentRawTextResponse,
+    dependencies=admin_dependencies,
+)
+def get_legal_document_raw_text(
+    document_id: str,
+    repository: LegalRepository = Depends(get_repository),
+) -> LegalDocumentRawTextResponse:
+    document = repository.get_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    raw_text = repository.get_document_raw_text(document_id)
+    if raw_text is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document raw text not found.")
+    return LegalDocumentRawTextResponse(document_id=document_id, raw_text=raw_text)
+
+
 @router.post(
     "/admin/documents/{document_id}/status",
     response_model=AdminDocumentStatusResponse,
@@ -436,7 +455,11 @@ def update_legal_document_status(
     repository: LegalRepository = Depends(get_repository),
 ) -> AdminDocumentStatusResponse:
     response = promote_document(
-        PromoteDocumentRequest(document_id=document_id, target_status=payload.target_status.value),
+        PromoteDocumentRequest(
+            document_id=document_id,
+            target_status=payload.target_status.value,
+            change_note=payload.change_note,
+        ),
         repository,
         source_policy,
     )

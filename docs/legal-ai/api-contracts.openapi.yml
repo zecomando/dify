@@ -353,6 +353,28 @@ paths:
                 $ref: "#/components/schemas/LegalChunkListResponse"
         "404":
           description: Document not found
+  /admin/documents/{document_id}/raw-text:
+    get:
+      summary: Retrieve raw text for a legal document under admin review
+      operationId: getLegalDocumentRawText
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Legal document raw text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDocumentRawTextResponse"
+        "404":
+          description: Document or raw text not found
   /admin/documents/{document_id}/status:
     post:
       summary: Update legal document status
@@ -1210,6 +1232,7 @@ components:
         - legal_value_warning
         - area
         - legal_metadata
+        - change_note
         - created_at
         - updated_at
       properties:
@@ -1246,6 +1269,8 @@ components:
           type: object
           additionalProperties:
             type: string
+        change_note:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -1304,6 +1329,17 @@ components:
             $ref: "#/components/schemas/LegalChunkResponse"
         total:
           type: integer
+    LegalDocumentRawTextResponse:
+      type: object
+      required:
+        - document_id
+        - raw_text
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        raw_text:
+          type: string
     AdminDocumentStatusRequest:
       type: object
       required:
@@ -1312,6 +1348,9 @@ components:
         target_status:
           type: string
           enum: [pending_review, chat_ready, rejected, archived]
+        change_note:
+          type: string
+          maxLength: 2000
     AdminDocumentStatusResponse:
       type: object
       required:

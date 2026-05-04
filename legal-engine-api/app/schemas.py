@@ -302,10 +302,18 @@ class LegalChunkListResponse(BaseModel):
     total: int
 
 
+class LegalDocumentRawTextResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str
+    raw_text: str
+
+
 class AdminDocumentStatusRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_status: DocumentStatus
+    change_note: str = Field(default="", max_length=2000)
 
 
 class AdminDocumentStatusResponse(BaseModel):
@@ -431,6 +439,7 @@ class PromoteDocumentRequest(BaseModel):
 
     document_id: str = Field(min_length=1)
     target_status: str = "chat_ready"
+    change_note: str = Field(default="", max_length=2000)
 
 
 class PromoteDocumentResponse(BaseModel):
