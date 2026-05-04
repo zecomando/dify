@@ -7,6 +7,7 @@ from app.api.routes import get_repository
 from app.config import get_settings
 from app.ingestion import ingest_source
 from app.main import app
+from app.provider_readiness import PROVIDER_REQUIREMENTS
 from app.repository import LegalRepository
 from app.schemas import IngestionSourceRequest
 from app.source_policy import SourcePolicy, SourcePolicyStatus
@@ -410,6 +411,7 @@ def test_feedback_answer_endpoint_persists_feedback_and_admin_lists_it(tmp_path)
             json={
                 "audit_id": answer_response.json()["audit_id"],
                 "rating": "negative",
+                "category": "incomplete_answer",
                 "comment": "A resposta devia explicar melhor a abstenção.",
                 "session_id": "session-feedback",
                 "user_id": "user-feedback",
@@ -418,7 +420,7 @@ def test_feedback_answer_endpoint_persists_feedback_and_admin_lists_it(tmp_path)
         list_response = client.get("/admin/feedback", headers=ADMIN_HEADERS)
         filtered_response = client.get(
             "/admin/feedback",
-            params={"rating": "negative", "session_id": "session-feedback"},
+            params={"rating": "negative", "category": "incomplete_answer", "session_id": "session-feedback"},
             headers=ADMIN_HEADERS,
         )
     finally:
@@ -428,6 +430,7 @@ def test_feedback_answer_endpoint_persists_feedback_and_admin_lists_it(tmp_path)
     payload = feedback_response.json()
     assert payload["audit_id"] == answer_response.json()["audit_id"]
     assert payload["rating"] == "negative"
+    assert payload["category"] == "incomplete_answer"
     assert payload["comment"] == "A resposta devia explicar melhor a abstenção."
     assert payload["created_at"]
     assert list_response.status_code == 200
@@ -435,6 +438,7 @@ def test_feedback_answer_endpoint_persists_feedback_and_admin_lists_it(tmp_path)
     assert list_response.json()["feedback"][0]["id"] == payload["id"]
     assert filtered_response.status_code == 200
     assert filtered_response.json()["total"] == 1
+    assert filtered_response.json()["feedback"][0]["category"] == "incomplete_answer"
     assert filtered_response.json()["feedback"][0]["session_id"] == "session-feedback"
 
 
@@ -540,6 +544,34 @@ def test_admin_diagnostics_and_metrics_endpoints_return_operational_counts(tmp_p
     assert metrics["ingestion_jobs"]["rejected"] == 1
 
 
+def test_admin_provider_readiness_reports_missing_providers_without_secret_values(monkeypatch):
+    for requirement in PROVIDER_REQUIREMENTS:
+        env_vars = requirement.required_env_vars + requirement.optional_env_vars
+        for any_group in requirement.any_env_var_groups:
+            env_vars += any_group
+        for env_var in env_vars:
+            if env_var == "LEGAL_ENGINE_ADMIN_TOKEN":
+                continue
+            monkeypatch.delenv(env_var, raising=False)
+    secret_value = "sk-test-secret-value-that-must-not-leak"
+    monkeypatch.setenv("OPENAI_API_KEY", secret_value)
+
+    response = client.get("/admin/provider-readiness", headers=ADMIN_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "blocked"
+    assert payload["providers_total"] > 0
+    assert payload["missing_providers"] > 0
+    assert "Cohere rerank" in payload["paid_provider_blockers"]
+    serialized = str(payload)
+    assert secret_value not in serialized
+    assert "OPENAI_API_KEY" in serialized
+    openai_embeddings = next(provider for provider in payload["providers"] if provider["name"] == "OpenAI embeddings")
+    assert openai_embeddings["configured"] is True
+    assert openai_embeddings["configured_env_vars"] == ["OPENAI_API_KEY"]
+
+
 def test_admin_evaluation_run_endpoint_persists_and_returns_run(tmp_path):
     evals_dir = tmp_path / "evals"
     evals_dir.mkdir()
@@ -642,6 +674,7 @@ def test_openapi_smoke_includes_chat_and_admin_endpoints():
     assert "/admin/ingestion/jobs/{job_id}" in paths
     assert "/admin/diagnostics" in paths
     assert "/admin/metrics" in paths
+    assert "/admin/provider-readiness" in paths
     assert "/admin/evaluation/run" in paths
     assert "/admin/evaluation/runs" in paths
     assert payload["components"]["securitySchemes"]["AdminTokenAuth"] == {

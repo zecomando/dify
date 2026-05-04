@@ -61,6 +61,21 @@ def test_openapi_contract_includes_admin_document_review_helpers():
     assert "change_note" in schemas["LegalDocumentResponse"]["properties"]
 
 
+def test_openapi_contract_includes_admin_provider_readiness_endpoint():
+    contract = _openapi_contract()
+    paths = contract["paths"]
+    schemas = contract["components"]["schemas"]
+
+    assert "/admin/provider-readiness" in paths
+    assert paths["/admin/provider-readiness"]["get"]["security"] == [{"AdminTokenAuth": []}]
+    provider_schema = paths["/admin/provider-readiness"]["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]
+    assert provider_schema["$ref"] == "#/components/schemas/AdminProviderReadinessResponse"
+    assert "AdminProviderReadinessResponse" in schemas
+    assert "ProviderReadinessItem" in schemas
+
+
 def test_openapi_contract_exposes_legal_metadata_in_core_models():
     schemas = _openapi_contract()["components"]["schemas"]
 
@@ -86,3 +101,5 @@ def test_openapi_contract_includes_answer_feedback_endpoints():
     assert "AnswerFeedbackRequest" in schemas
     assert "AnswerFeedback" in schemas
     assert "AnswerFeedbackListResponse" in schemas
+    assert "category" in schemas["AnswerFeedbackRequest"]["properties"]
+    assert "category" in schemas["AnswerFeedback"]["properties"]

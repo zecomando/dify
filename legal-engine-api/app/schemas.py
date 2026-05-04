@@ -21,6 +21,15 @@ class AnswerFeedbackRating(StrEnum):
     NEUTRAL = "neutral"
 
 
+class AnswerFeedbackCategory(StrEnum):
+    WRONG_SOURCE = "wrong_source"
+    INCOMPLETE_ANSWER = "incomplete_answer"
+    LEGAL_ERROR = "legal_error"
+    TOO_VAGUE = "too_vague"
+    OUTDATED_SOURCE = "outdated_source"
+    OTHER = "other"
+
+
 class IngestionJobStatus(StrEnum):
     PENDING = "pending"
     COMPLETED = "completed"
@@ -349,6 +358,7 @@ class AnswerFeedbackRequest(BaseModel):
 
     audit_id: str = Field(min_length=1)
     rating: AnswerFeedbackRating
+    category: AnswerFeedbackCategory | None = None
     comment: str | None = Field(default=None, max_length=2000)
     user_id: str | None = None
     session_id: str | None = None
@@ -360,6 +370,7 @@ class AnswerFeedbackResponse(BaseModel):
     id: str
     audit_id: str
     rating: AnswerFeedbackRating
+    category: AnswerFeedbackCategory | None = None
     comment: str | None = None
     user_id: str | None = None
     session_id: str | None = None
@@ -516,3 +527,28 @@ class AdminMetricsResponse(BaseModel):
     answer_audits: dict[str, int]
     answer_feedback: dict[str, int]
     evaluation_runs: dict[str, int]
+
+
+class ProviderReadinessItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    category: str
+    required_for: str
+    paid: bool
+    configured: bool
+    configured_env_vars: list[str]
+    missing_env_vars: list[str]
+    optional_env_vars: list[str]
+    notes: str
+
+
+class AdminProviderReadinessResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    providers_total: int
+    configured_providers: int
+    missing_providers: int
+    paid_provider_blockers: list[str]
+    providers: list[ProviderReadinessItem]

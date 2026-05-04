@@ -10,6 +10,7 @@ from app.corpus import seed_initial_corpus
 from app.demo import run_demo
 from app.evaluation import get_default_evals_dir, run_evaluation
 from app.n8n_workflows import get_default_n8n_workflows_dir, validate_n8n_workflows
+from app.provider_readiness import get_provider_readiness
 from app.repository import LegalRepository
 from app.source_policy import SourcePolicy, get_default_source_policy_path
 
@@ -42,6 +43,7 @@ def run_readiness(
     run_demo_check: bool = True,
     run_eval_check: bool = True,
     run_n8n_check: bool = True,
+    run_provider_check: bool = True,
 ) -> ReadinessRunResult:
     checks: list[ReadinessCheckResult] = []
     repository = LegalRepository(database_path, database_url)
@@ -61,6 +63,19 @@ def run_readiness(
             "configured" if admin_token else "not required for this run",
         )
     )
+    if run_provider_check:
+        provider_result = get_provider_readiness()
+        checks.append(
+            ReadinessCheckResult(
+                "provider_readiness",
+                True,
+                (
+                    f"configured={provider_result.configured_providers}/{provider_result.providers_total}, "
+                    f"missing={provider_result.missing_providers}, "
+                    f"paid_blockers={len(provider_result.paid_provider_blockers)}"
+                ),
+            )
+        )
 
     if run_seed:
         seed_result = seed_initial_corpus(repository, source_policy)
@@ -154,6 +169,7 @@ def main() -> int:
     parser.add_argument("--skip-demo", action="store_true")
     parser.add_argument("--skip-eval", action="store_true")
     parser.add_argument("--skip-n8n", action="store_true")
+    parser.add_argument("--skip-provider-readiness", action="store_true")
     parser.add_argument("--json", action="store_true", help="Print readiness result as JSON.")
     args = parser.parse_args()
 
@@ -170,6 +186,7 @@ def main() -> int:
         run_demo_check=not args.skip_demo,
         run_eval_check=not args.skip_eval,
         run_n8n_check=not args.skip_n8n,
+        run_provider_check=not args.skip_provider_readiness,
     )
     if args.json:
         print(json.dumps(_result_dict(result), ensure_ascii=False, indent=2))

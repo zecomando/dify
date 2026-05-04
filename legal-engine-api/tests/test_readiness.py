@@ -26,6 +26,7 @@ def test_run_readiness_can_check_database_policy_seed_and_demo_without_external_
         "database_migration",
         "source_policy",
         "admin_token",
+        "provider_readiness",
         "seed",
         "demo",
         "n8n_workflows",
@@ -46,6 +47,7 @@ def test_run_readiness_fails_when_admin_token_is_required_but_missing(tmp_path: 
         run_demo_check=False,
         run_eval_check=False,
         run_n8n_check=False,
+        run_provider_check=False,
     )
 
     assert result.passed is False
@@ -77,3 +79,4 @@ def test_readiness_cli_prints_json_result(tmp_path: Path, monkeypatch, capsys):
     assert exit_code == 0
     assert '"passed": true' in captured.out
     assert '"database_migration"' in captured.out
+    assert '"provider_readiness"' in captured.out

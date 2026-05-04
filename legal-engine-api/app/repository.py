@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 
-SCHEMA_VERSION = "0002_document_temporal_metadata"
+SCHEMA_VERSION = "0003_answer_feedback_category"
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
@@ -200,6 +200,7 @@ class AnswerFeedbackRecord:
     id: str
     audit_id: str
     rating: str
+    category: str | None
     comment: str | None
     user_id: str | None
     session_id: str | None
@@ -352,6 +353,7 @@ class LegalRepository:
                     id TEXT PRIMARY KEY,
                     audit_id TEXT NOT NULL REFERENCES answer_audits(id) ON DELETE CASCADE,
                     rating TEXT NOT NULL,
+                    category TEXT,
                     comment TEXT,
                     user_id TEXT,
                     session_id TEXT,
@@ -409,6 +411,8 @@ class LegalRepository:
                 "change_note",
                 "TEXT NOT NULL DEFAULT ''",
             )
+            _ensure_column(connection, self.backend, "answer_feedback", "category", "TEXT")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_answer_feedback_category ON answer_feedback(category)")
             _record_schema_migrations_from_files(connection)
             _record_schema_migration(connection, SCHEMA_VERSION)
 
@@ -695,16 +699,18 @@ class LegalRepository:
                     id,
                     audit_id,
                     rating,
+                    category,
                     comment,
                     user_id,
                     session_id,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     feedback.id,
                     feedback.audit_id,
                     feedback.rating,
+                    feedback.category,
                     feedback.comment,
                     feedback.user_id,
                     feedback.session_id,
@@ -1295,6 +1301,7 @@ class LegalRepository:
         *,
         audit_id: str | None = None,
         rating: str | None = None,
+        category: str | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
         limit: int = 50,
@@ -1308,6 +1315,9 @@ class LegalRepository:
         if rating is not None:
             clauses.append("rating = ?")
             params.append(rating)
+        if category is not None:
+            clauses.append("category = ?")
+            params.append(category)
         if session_id is not None:
             clauses.append("session_id = ?")
             params.append(session_id)
@@ -1322,6 +1332,7 @@ class LegalRepository:
                     id,
                     audit_id,
                     rating,
+                    category,
                     comment,
                     user_id,
                     session_id,
@@ -1340,6 +1351,7 @@ class LegalRepository:
         *,
         audit_id: str | None = None,
         rating: str | None = None,
+        category: str | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
     ) -> int:
@@ -1351,6 +1363,9 @@ class LegalRepository:
         if rating is not None:
             clauses.append("rating = ?")
             params.append(rating)
+        if category is not None:
+            clauses.append("category = ?")
+            params.append(category)
         if session_id is not None:
             clauses.append("session_id = ?")
             params.append(session_id)
@@ -1750,10 +1765,11 @@ def _answer_feedback_from_row(row: sqlite3.Row | tuple[object, ...]) -> AnswerFe
         id=str(row[0]),
         audit_id=str(row[1]),
         rating=str(row[2]),
-        comment=str(row[3]) if row[3] is not None else None,
-        user_id=str(row[4]) if row[4] is not None else None,
-        session_id=str(row[5]) if row[5] is not None else None,
-        created_at=str(row[6]),
+        category=str(row[3]) if row[3] is not None else None,
+        comment=str(row[4]) if row[4] is not None else None,
+        user_id=str(row[5]) if row[5] is not None else None,
+        session_id=str(row[6]) if row[6] is not None else None,
+        created_at=str(row[7]),
     )
 
 

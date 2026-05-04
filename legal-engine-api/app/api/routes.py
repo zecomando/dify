@@ -27,6 +27,7 @@ from app.evaluation import (
 )
 from app.ingestion import crawl_url, ingest_source, promote_document, reindex_corpus
 from app.pipeline import answer_chat
+from app.provider_readiness import ProviderReadinessResult, get_provider_readiness
 from app.repository import (
     AnswerAuditRecord,
     AnswerFeedbackRecord,
@@ -42,11 +43,13 @@ from app.schemas import (
     AdminDocumentStatusRequest,
     AdminDocumentStatusResponse,
     AdminMetricsResponse,
+    AdminProviderReadinessResponse,
     AnswerGenerateRequest,
     AnswerGenerateResponse,
     AnswerAuditResponse,
     AnswerAuditListResponse,
     AnswerAuditSummaryResponse,
+    AnswerFeedbackCategory,
     AnswerFeedbackListResponse,
     AnswerFeedbackRating,
     AnswerFeedbackRequest,
@@ -74,6 +77,7 @@ from app.schemas import (
     LegalDocumentListResponse,
     LegalDocumentRawTextResponse,
     LegalDocumentResponse,
+    ProviderReadinessItem,
     PromoteDocumentRequest,
     PromoteDocumentResponse,
     RerankRequest,
@@ -211,6 +215,7 @@ def _answer_feedback_to_response(feedback: AnswerFeedbackRecord) -> AnswerFeedba
         id=feedback.id,
         audit_id=feedback.audit_id,
         rating=feedback.rating,
+        category=feedback.category,
         comment=feedback.comment,
         user_id=feedback.user_id,
         session_id=feedback.session_id,
@@ -227,6 +232,30 @@ def _evaluation_run_to_summary_response(run: EvaluationRunRecord) -> EvaluationR
         failed_cases_count=run.failed_cases,
         evals_dir=run.evals_dir,
         created_at=run.created_at,
+    )
+
+
+def _provider_readiness_to_response(result: ProviderReadinessResult) -> AdminProviderReadinessResponse:
+    return AdminProviderReadinessResponse(
+        status=result.status,
+        providers_total=result.providers_total,
+        configured_providers=result.configured_providers,
+        missing_providers=result.missing_providers,
+        paid_provider_blockers=list(result.paid_provider_blockers),
+        providers=[
+            ProviderReadinessItem(
+                name=provider.name,
+                category=provider.category,
+                required_for=provider.required_for,
+                paid=provider.paid,
+                configured=provider.configured,
+                configured_env_vars=list(provider.configured_env_vars),
+                missing_env_vars=list(provider.missing_env_vars),
+                optional_env_vars=list(provider.optional_env_vars),
+                notes=provider.notes,
+            )
+            for provider in result.providers
+        ],
     )
 
 
@@ -294,6 +323,15 @@ def get_admin_metrics(repository: LegalRepository = Depends(get_repository)) -> 
     )
 
 
+@router.get(
+    "/admin/provider-readiness",
+    response_model=AdminProviderReadinessResponse,
+    dependencies=admin_dependencies,
+)
+def get_admin_provider_readiness() -> AdminProviderReadinessResponse:
+    return _provider_readiness_to_response(get_provider_readiness())
+
+
 @router.post("/query/classify", response_model=ClassifyQueryResponse)
 def classify_legal_query(payload: ClassifyQueryRequest) -> ClassifyQueryResponse:
     return classify_query(payload)
@@ -355,6 +393,7 @@ def create_answer_feedback(
             id=str(uuid4()),
             audit_id=payload.audit_id,
             rating=payload.rating.value,
+            category=payload.category.value if payload.category is not None else None,
             comment=payload.comment,
             user_id=payload.user_id,
             session_id=payload.session_id,
@@ -514,6 +553,7 @@ def get_answer_audit(
 def list_answer_feedback(
     audit_id: str | None = None,
     rating: AnswerFeedbackRating | None = None,
+    category: AnswerFeedbackCategory | None = None,
     session_id: str | None = None,
     user_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
@@ -521,9 +561,11 @@ def list_answer_feedback(
     repository: LegalRepository = Depends(get_repository),
 ) -> AnswerFeedbackListResponse:
     rating_value = rating.value if rating is not None else None
+    category_value = category.value if category is not None else None
     feedback = repository.list_answer_feedback(
         audit_id=audit_id,
         rating=rating_value,
+        category=category_value,
         session_id=session_id,
         user_id=user_id,
         limit=limit,
@@ -532,6 +574,7 @@ def list_answer_feedback(
     total = repository.count_answer_feedback(
         audit_id=audit_id,
         rating=rating_value,
+        category=category_value,
         session_id=session_id,
         user_id=user_id,
     )

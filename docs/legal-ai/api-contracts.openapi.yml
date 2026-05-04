@@ -252,6 +252,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/IngestionJobResponse"
+  /admin/provider-readiness:
+    get:
+      summary: Check configured external provider requirements without exposing secret values
+      operationId: getProviderReadiness
+      security:
+        - AdminTokenAuth: []
+      responses:
+        "200":
+          description: External provider readiness report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProviderReadinessResponse"
   /admin/corpus/seed:
     post:
       summary: Seed the deterministic initial local corpus
@@ -482,6 +495,11 @@ paths:
           schema:
             type: string
             enum: [positive, negative, neutral]
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [wrong_source, incomplete_answer, legal_error, too_vague, outdated_source, other]
         - name: session_id
           in: query
           schema:
@@ -1358,6 +1376,70 @@ components:
       properties:
         document:
           $ref: "#/components/schemas/LegalDocumentResponse"
+    ProviderReadinessItem:
+      type: object
+      required:
+        - name
+        - category
+        - required_for
+        - paid
+        - configured
+        - configured_env_vars
+        - missing_env_vars
+        - optional_env_vars
+        - notes
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        required_for:
+          type: string
+        paid:
+          type: boolean
+        configured:
+          type: boolean
+        configured_env_vars:
+          type: array
+          items:
+            type: string
+        missing_env_vars:
+          type: array
+          items:
+            type: string
+        optional_env_vars:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+    AdminProviderReadinessResponse:
+      type: object
+      required:
+        - status
+        - providers_total
+        - configured_providers
+        - missing_providers
+        - paid_provider_blockers
+        - providers
+      properties:
+        status:
+          type: string
+          enum: [ready, blocked]
+        providers_total:
+          type: integer
+        configured_providers:
+          type: integer
+        missing_providers:
+          type: integer
+        paid_provider_blockers:
+          type: array
+          items:
+            type: string
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderReadinessItem"
     InitialCorpusSeedResponse:
       type: object
       required:
@@ -1454,6 +1536,9 @@ components:
         rating:
           type: string
           enum: [positive, negative, neutral]
+        category:
+          type: string
+          enum: [wrong_source, incomplete_answer, legal_error, too_vague, outdated_source, other]
         comment:
           type: string
           maxLength: 2000
@@ -1478,6 +1563,9 @@ components:
         rating:
           type: string
           enum: [positive, negative, neutral]
+        category:
+          type: string
+          enum: [wrong_source, incomplete_answer, legal_error, too_vague, outdated_source, other]
         comment:
           type: string
         user_id:
