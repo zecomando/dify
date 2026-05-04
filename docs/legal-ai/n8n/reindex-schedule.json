@@ -27,7 +27,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = { force: true };\nif ($env.LEGAL_ENGINE_REINDEX_SOURCE) {\n  payload.source = $env.LEGAL_ENGINE_REINDEX_SOURCE;\n}\nif ($env.LEGAL_ENGINE_REINDEX_JURISDICTION) {\n  payload.jurisdiction = $env.LEGAL_ENGINE_REINDEX_JURISDICTION;\n}\nif ($env.LEGAL_ENGINE_REINDEX_DOCUMENT_IDS) {\n  payload.document_ids = $env.LEGAL_ENGINE_REINDEX_DOCUMENT_IDS.split(',').map((item) => item.trim()).filter(Boolean);\n}\nreturn [{ json: payload }];"
+        "jsCode": "const payload = { force: true };\nif ($env.LEGAL_ENGINE_REINDEX_SOURCE) {\n  if (!$env.LEGAL_ENGINE_REINDEX_SOURCE.trim()) {\n    throw new Error('LEGAL_ENGINE_REINDEX_SOURCE is set but empty.');\n  }\n  payload.source = $env.LEGAL_ENGINE_REINDEX_SOURCE;\n}\nif ($env.LEGAL_ENGINE_REINDEX_JURISDICTION) {\n  if (!$env.LEGAL_ENGINE_REINDEX_JURISDICTION.trim()) {\n    throw new Error('LEGAL_ENGINE_REINDEX_JURISDICTION is set but empty.');\n  }\n  payload.jurisdiction = $env.LEGAL_ENGINE_REINDEX_JURISDICTION;\n}\nif ($env.LEGAL_ENGINE_REINDEX_DOCUMENT_IDS) {\n  payload.document_ids = $env.LEGAL_ENGINE_REINDEX_DOCUMENT_IDS.split(',').map((item) => item.trim()).filter(Boolean);\n  if (payload.document_ids.length === 0) {\n    throw new Error('LEGAL_ENGINE_REINDEX_DOCUMENT_IDS is set but empty after parsing.');\n  }\n}\nreturn [{ json: payload }];"
       },
       "id": "prepare-reindex-payload",
       "name": "Prepare Reindex Payload",

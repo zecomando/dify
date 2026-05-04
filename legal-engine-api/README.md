@@ -23,6 +23,7 @@ uv run --project legal-engine-api ruff check app tests
 uv run --project legal-engine-api ruff format --check app tests
 uv run --project legal-engine-api legal-seed
 uv run --project legal-engine-api legal-demo
+uv run --project legal-engine-api legal-n8n-validate
 uv run --project legal-engine-api legal-readiness --skip-eval
 uv run --project legal-engine-api uvicorn app.main:app --reload
 ```
@@ -67,6 +68,12 @@ uv run --project legal-engine-api legal-readiness --require-admin-token --databa
 ```
 
 The command checks schema initialization, source policy loading, optional admin token presence, seed, deterministic demo, and evaluation gates.
+
+The readiness command also validates the exported n8n workflows under `docs/legal-ai/n8n`. You can run that gate independently:
+
+```bash
+uv run --project legal-engine-api legal-n8n-validate
+```
 
 ## Local MVP status
 

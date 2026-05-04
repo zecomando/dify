@@ -24,7 +24,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = {};\nif ($env.LEGAL_ENGINE_EVALS_DIR) {\n  payload.evals_dir = $env.LEGAL_ENGINE_EVALS_DIR;\n}\nreturn [{ json: payload }];"
+        "jsCode": "const payload = {};\nif ($env.LEGAL_ENGINE_EVALS_DIR) {\n  if (!$env.LEGAL_ENGINE_EVALS_DIR.trim()) {\n    throw new Error('LEGAL_ENGINE_EVALS_DIR is set but empty.');\n  }\n  payload.evals_dir = $env.LEGAL_ENGINE_EVALS_DIR;\n}\nreturn [{ json: payload }];"
       },
       "id": "prepare-evaluation-payload",
       "name": "Prepare Evaluation Payload",

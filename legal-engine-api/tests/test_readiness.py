@@ -5,6 +5,7 @@ from app.readiness import main, run_readiness
 
 POLICY_PATH = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "source-policy.yml"
 EVALS_DIR = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "evals"
+N8N_DIR = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "n8n"
 
 
 def test_run_readiness_can_check_database_policy_seed_and_demo_without_external_providers(tmp_path: Path):
@@ -13,6 +14,7 @@ def test_run_readiness_can_check_database_policy_seed_and_demo_without_external_
         database_url=None,
         source_policy_path=POLICY_PATH,
         evals_dir=EVALS_DIR,
+        n8n_workflows_dir=N8N_DIR,
         require_admin_token=False,
         admin_token=None,
         run_eval_check=False,
@@ -26,6 +28,7 @@ def test_run_readiness_can_check_database_policy_seed_and_demo_without_external_
         "admin_token",
         "seed",
         "demo",
+        "n8n_workflows",
     }
     assert all(check.passed for check in result.checks)
 
@@ -36,11 +39,13 @@ def test_run_readiness_fails_when_admin_token_is_required_but_missing(tmp_path: 
         database_url=None,
         source_policy_path=POLICY_PATH,
         evals_dir=EVALS_DIR,
+        n8n_workflows_dir=N8N_DIR,
         require_admin_token=True,
         admin_token=None,
         run_seed=False,
         run_demo_check=False,
         run_eval_check=False,
+        run_n8n_check=False,
     )
 
     assert result.passed is False
@@ -59,6 +64,8 @@ def test_readiness_cli_prints_json_result(tmp_path: Path, monkeypatch, capsys):
             str(POLICY_PATH),
             "--evals-dir",
             str(EVALS_DIR),
+            "--n8n-workflows-dir",
+            str(N8N_DIR),
             "--skip-eval",
             "--json",
         ],

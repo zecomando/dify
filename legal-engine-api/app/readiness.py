@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.corpus import seed_initial_corpus
 from app.demo import run_demo
 from app.evaluation import get_default_evals_dir, run_evaluation
+from app.n8n_workflows import get_default_n8n_workflows_dir, validate_n8n_workflows
 from app.repository import LegalRepository
 from app.source_policy import SourcePolicy, get_default_source_policy_path
 
@@ -34,11 +35,13 @@ def run_readiness(
     database_url: str | None,
     source_policy_path: Path,
     evals_dir: Path,
+    n8n_workflows_dir: Path,
     require_admin_token: bool,
     admin_token: str | None,
     run_seed: bool = True,
     run_demo_check: bool = True,
     run_eval_check: bool = True,
+    run_n8n_check: bool = True,
 ) -> ReadinessRunResult:
     checks: list[ReadinessCheckResult] = []
     repository = LegalRepository(database_path, database_url)
@@ -94,6 +97,17 @@ def run_readiness(
             )
         )
 
+    if run_n8n_check:
+        n8n_result = validate_n8n_workflows(n8n_workflows_dir)
+        failed_workflows = [workflow for workflow in n8n_result.workflows if not workflow.passed]
+        checks.append(
+            ReadinessCheckResult(
+                "n8n_workflows",
+                n8n_result.passed,
+                f"validated={len(n8n_result.workflows)}, failed={len(failed_workflows)}",
+            )
+        )
+
     return ReadinessRunResult(
         passed=all(check.passed for check in checks),
         backend=repository.backend,
@@ -129,10 +143,17 @@ def main() -> int:
         default=get_default_evals_dir(),
         help="Path to docs/legal-ai/evals.",
     )
+    parser.add_argument(
+        "--n8n-workflows-dir",
+        type=Path,
+        default=get_default_n8n_workflows_dir(),
+        help="Path to docs/legal-ai/n8n workflow exports.",
+    )
     parser.add_argument("--require-admin-token", action="store_true")
     parser.add_argument("--skip-seed", action="store_true")
     parser.add_argument("--skip-demo", action="store_true")
     parser.add_argument("--skip-eval", action="store_true")
+    parser.add_argument("--skip-n8n", action="store_true")
     parser.add_argument("--json", action="store_true", help="Print readiness result as JSON.")
     args = parser.parse_args()
 
@@ -142,11 +163,13 @@ def main() -> int:
         database_url=args.database_url or settings.database_url,
         source_policy_path=args.source_policy,
         evals_dir=args.evals_dir,
+        n8n_workflows_dir=args.n8n_workflows_dir,
         require_admin_token=args.require_admin_token,
         admin_token=settings.admin_token,
         run_seed=not args.skip_seed,
         run_demo_check=not args.skip_demo,
         run_eval_check=not args.skip_eval,
+        run_n8n_check=not args.skip_n8n,
     )
     if args.json:
         print(json.dumps(_result_dict(result), ensure_ascii=False, indent=2))
