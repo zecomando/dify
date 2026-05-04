@@ -406,6 +406,44 @@ def test_crawl_url_fetches_and_ingests_dgsi_case_law_with_required_metadata(tmp_
     assert document.legal_metadata["decision_date"] == "2024-01-11"
 
 
+def test_crawl_url_fetches_and_ingests_csm_case_law_with_required_metadata(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://jurisprudencia.csm.org.pt/ecli/ECLI:PT:TRL:2024:123.20.0T8LSB.L1"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Tribunal da Relação de Lisboa</h1>
+            <p>Tribunal: Tribunal da Relação de Lisboa</p>
+            <p>Processo n.º: 123/20.0T8LSB.L1</p>
+            <p>Data do Acórdão: 2024-04-18</p>
+            <p>Responsabilidade civil e contrato de prestação de serviços.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "CSM_JURISPRUDENCE"
+    assert document.status == "chat_ready"
+    assert document.document_type == "case_law"
+    assert document.area == ("civil",)
+    assert document.legal_metadata["court"] == "Tribunal da Relação de Lisboa"
+    assert document.legal_metadata["process_number"] == "123/20.0T8LSB.L1"
+    assert document.legal_metadata["decision_date"] == "2024-04-18"
+    assert (
+        document.legal_metadata["source_url"]
+        == "https://jurisprudencia.csm.org.pt/ecli/ECLI:PT:TRL:2024:123.20.0T8LSB.L1"
+    )
+
+
 def test_crawl_url_fetches_and_ingests_tribunal_constitucional_case_law(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(
@@ -471,6 +509,44 @@ def test_crawl_url_fetches_and_ingests_curia_case_law(tmp_path: Path):
     assert document.legal_metadata["court"] == "Court of Justice"
     assert document.legal_metadata["case_number"] == "C-311/18"
     assert document.legal_metadata["decision_date"] == "2020-07-16"
+
+
+def test_crawl_url_fetches_and_ingests_infocuria_case_law(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://infocuria.curia.europa.eu/juris/document/document.jsf?docid=654321"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Judgment of the General Court</h1>
+            <p>Court: General Court</p>
+            <p>Case T-123/21</p>
+            <p>Date: 2023-11-09</p>
+            <p>Public procurement and transparency obligations.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "INFOCURIA"
+    assert document.status == "chat_ready"
+    assert document.document_type == "case_law"
+    assert document.area == ("contratacao_publica",)
+    assert document.legal_metadata["court"] == "General Court"
+    assert document.legal_metadata["case_number"] == "T-123/21"
+    assert document.legal_metadata["decision_date"] == "2023-11-09"
+    assert (
+        document.legal_metadata["source_url"]
+        == "https://infocuria.curia.europa.eu/juris/document/document.jsf?docid=654321"
+    )
 
 
 def test_crawl_url_fetches_and_ingests_hudoc_case_law(tmp_path: Path):

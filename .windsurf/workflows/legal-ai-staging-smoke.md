@@ -11,7 +11,8 @@ Use this workflow to validate that `legal-engine-api` is ready for local demo or
 2. Ensure `LEGAL_ENGINE_ADMIN_TOKEN` is set outside the repository for API admin checks.
 3. Ensure `LEGAL_ENGINE_BASE_URL` points to the running API, for example `http://127.0.0.1:8000`.
 4. For persistent local/staging smoke, ensure `LEGAL_ENGINE_DATABASE_PATH` points to the SQLite database used by the running API.
-5. Do not commit secrets, generated databases, or exported workflows containing credentials.
+5. For PostgreSQL local-first smoke, ensure `LEGAL_ENGINE_DATABASE_URL` points to the local database and use `PGPASSWORD` outside the repository.
+6. Do not commit secrets, generated databases, or exported workflows containing credentials.
 
 ## CLI quality gates
 
@@ -52,6 +53,45 @@ uv run --project legal-engine-api legal-eval
 uv run --project legal-engine-api legal-demo
 ```
 
+## PostgreSQL local-first variant
+
+Use this variant before moving to cloud or hosted servers.
+
+Set session-only variables:
+
+```powershell
+$env:PATH = "C:\Program Files\PostgreSQL\16\bin;$env:PATH"
+$env:PGPASSWORD = Read-Host "PostgreSQL password"
+$env:LEGAL_ENGINE_DATABASE_URL = "postgresql://postgres@127.0.0.1:5432/legal_engine_staging"
+$env:LEGAL_ENGINE_ADMIN_TOKEN = Read-Host "Legal Engine admin token"
+$env:LEGAL_ENGINE_BASE_URL = "http://127.0.0.1:8000"
+```
+
+Run the PostgreSQL gates:
+
+```powershell
+uv run --project legal-engine-api legal-db-migrate --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-seed --database-url $env:LEGAL_ENGINE_DATABASE_URL --json
+uv run --project legal-engine-api legal-demo --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-eval --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-readiness --database-url $env:LEGAL_ENGINE_DATABASE_URL --require-admin-token
+```
+
+Test backup and restore into a clean local database:
+
+```powershell
+uv run --project legal-engine-api legal-db-backup `
+  --database-url $env:LEGAL_ENGINE_DATABASE_URL `
+  --output legal-engine-api/.data/legal_engine_staging_pg.dump
+
+& "C:\Program Files\PostgreSQL\16\bin\dropdb.exe" -h 127.0.0.1 -p 5432 -U postgres -w --if-exists legal_engine_restore_check
+& "C:\Program Files\PostgreSQL\16\bin\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -w legal_engine_restore_check
+
+uv run --project legal-engine-api legal-db-restore `
+  --database-url "postgresql://postgres@127.0.0.1:5432/legal_engine_restore_check" `
+  --input legal-engine-api/.data/legal_engine_staging_pg.dump
+```
+
 ## API smoke
 
 Only run these after `legal-engine-api` is already running and reachable at `LEGAL_ENGINE_BASE_URL`.
@@ -71,7 +111,9 @@ Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/corpus/seed" -Method Po
 8. Ask an answerable canonical question:
 
 ```powershell
-Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/chat/answer" -Method Post -ContentType "application/json" -Body '{"question":"Quais são os pressupostos da responsabilidade civil extracontratual?"}'
+$answerJson = @{ question = "Quais sao os pressupostos da responsabilidade civil extracontratual?" } | ConvertTo-Json -Compress
+$answerBytes = [System.Text.Encoding]::UTF8.GetBytes($answerJson)
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/chat/answer" -Method Post -ContentType "application/json; charset=utf-8" -Body $answerBytes
 ```
 
 9. Confirm documents are visible to admin:
@@ -89,7 +131,8 @@ Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/ingestion/jobs" -Method
 11. Run the persisted evaluation through the admin API:
 
 ```powershell
-Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/evaluation/run" -Method Post -ContentType "application/json" -Headers @{ "X-Admin-Token" = $env:LEGAL_ENGINE_ADMIN_TOKEN } -Body '{}'
+$evalBytes = [System.Text.Encoding]::UTF8.GetBytes("{}")
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/evaluation/run" -Method Post -ContentType "application/json; charset=utf-8" -Headers @{ "X-Admin-Token" = $env:LEGAL_ENGINE_ADMIN_TOKEN } -Body $evalBytes
 ```
 
 ## Dify smoke

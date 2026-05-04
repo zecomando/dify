@@ -70,6 +70,90 @@ Definir procedimentos operacionais para manter o serviço disponível, seguro, a
 7. Importar `docs/legal-ai/dify-chat-answer.yml` no Dify.
 8. Executar os smoke tests do chat no Dify.
 
+## PostgreSQL local-first
+
+Antes de usar cloud ou servidores externos, validar o caminho PostgreSQL com uma instância local.
+
+### Preparação PowerShell
+
+```powershell
+$env:PATH = "C:\Program Files\PostgreSQL\16\bin;$env:PATH"
+$env:PGPASSWORD = Read-Host "PostgreSQL password"
+$env:LEGAL_ENGINE_DATABASE_URL = "postgresql://postgres@127.0.0.1:5432/legal_engine_staging"
+$env:LEGAL_ENGINE_ADMIN_TOKEN = Read-Host "Legal Engine admin token"
+$env:LEGAL_ENGINE_BASE_URL = "http://127.0.0.1:8000"
+```
+
+Criar a base local se ainda não existir:
+
+```powershell
+$exists = & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -w -P pager=off -tAc "SELECT 1 FROM pg_database WHERE datname = 'legal_engine_staging';"
+if ($exists -ne "1") {
+  & "C:\Program Files\PostgreSQL\16\bin\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -w legal_engine_staging
+}
+```
+
+### Gates PostgreSQL locais
+
+```powershell
+uv run --project legal-engine-api legal-db-migrate --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-seed --database-url $env:LEGAL_ENGINE_DATABASE_URL --json
+uv run --project legal-engine-api legal-demo --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-eval --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-readiness --database-url $env:LEGAL_ENGINE_DATABASE_URL --require-admin-token
+```
+
+### Backup e restore locais
+
+```powershell
+uv run --project legal-engine-api legal-db-backup `
+  --database-url $env:LEGAL_ENGINE_DATABASE_URL `
+  --output legal-engine-api/.data/legal_engine_staging_pg.dump
+
+& "C:\Program Files\PostgreSQL\16\bin\dropdb.exe" -h 127.0.0.1 -p 5432 -U postgres -w --if-exists legal_engine_restore_check
+& "C:\Program Files\PostgreSQL\16\bin\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -w legal_engine_restore_check
+
+uv run --project legal-engine-api legal-db-restore `
+  --database-url "postgresql://postgres@127.0.0.1:5432/legal_engine_restore_check" `
+  --input legal-engine-api/.data/legal_engine_staging_pg.dump
+
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d legal_engine_restore_check -w -P pager=off -c "SELECT COUNT(*) AS documents FROM legal_documents; SELECT COUNT(*) AS jobs FROM source_ingestion_jobs;"
+```
+
+### API local contra PostgreSQL
+
+```powershell
+uv run --project legal-engine-api uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Executar smoke HTTP noutra sessão PowerShell com as mesmas variáveis:
+
+```powershell
+$headers = @{ "X-Admin-Token" = $env:LEGAL_ENGINE_ADMIN_TOKEN }
+
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/health" -Method Get
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/corpus/seed" -Method Post -Headers $headers
+
+$answerJson = @{ question = "Quais sao os pressupostos da responsabilidade civil extracontratual?" } | ConvertTo-Json -Compress
+$answerBytes = [System.Text.Encoding]::UTF8.GetBytes($answerJson)
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/chat/answer" -Method Post -ContentType "application/json; charset=utf-8" -Body $answerBytes
+
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/documents" -Method Get -Headers $headers
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/ingestion/jobs" -Method Get -Headers $headers
+
+$evalBytes = [System.Text.Encoding]::UTF8.GetBytes("{}")
+Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/evaluation/run" -Method Post -ContentType "application/json; charset=utf-8" -Headers $headers -Body $evalBytes
+```
+
+### Critérios de aprovação PostgreSQL local
+
+- `legal-db-migrate`, `legal-seed`, `legal-demo`, `legal-eval` e `legal-readiness` passam com `LEGAL_ENGINE_DATABASE_URL`.
+- O seed termina com documentos `chat_ready` e zero rejeições inesperadas.
+- `legal-demo` responde às perguntas canónicas e abstém quando não há corpus suficiente.
+- Backup com `pg_dump` e restore com `pg_restore` são testados numa base limpa.
+- O smoke HTTP local retorna health `ok`, documentos, jobs, `audit_id` e evaluation run persistido.
+- A password PostgreSQL e o admin token não ficam no repositório nem embutidos na URL.
+
 ## Staging smoke reproduzível
 
 ### Objetivo
@@ -274,6 +358,17 @@ Rollback deve incluir:
 - Source policy.
 - Configuração de retrieval.
 - Modelo/reranker se alterado.
+- Base de dados compatível com a versão de código restaurada.
+
+Para rollback local com PostgreSQL:
+
+1. Parar `legal-engine-api`.
+2. Restaurar um backup criado antes da alteração de schema para uma base limpa.
+3. Confirmar `schema_migrations` antes de arrancar a versão antiga.
+4. Executar `legal-db-migrate` com a versão restaurada do código.
+5. Executar `legal-demo`, `legal-eval` e smoke HTTP local.
+
+O arranque deve falhar se a base contiver uma migration aplicada que a versão local do código não conhece. Nesse caso, restaurar um backup compatível em vez de arrancar uma versão antiga contra uma base migrada para frente.
 
 ## Modo degradado seguro
 

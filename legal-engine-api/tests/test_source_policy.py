@@ -37,6 +37,16 @@ def test_official_authority_matches_subdomain():
     assert result.authority.source == "EURLEX"
 
 
+def test_official_authority_prefers_most_specific_domain():
+    policy = SourcePolicy.from_file(POLICY_PATH)
+
+    result = policy.check_url("https://infocuria.curia.europa.eu/juris/document/document.jsf?docid=654321")
+
+    assert result.status == SourcePolicyStatus.OFFICIAL_AUTHORITY
+    assert result.authority is not None
+    assert result.authority.source == "INFOCURIA"
+
+
 def test_discovery_only_domain_cannot_ground_answer():
     policy = SourcePolicy.from_file(POLICY_PATH)
 

@@ -234,6 +234,7 @@ class LegalRepository:
         return "postgresql" if self.database_url is not None else "sqlite"
 
     def initialize_schema(self) -> None:
+        _validate_schema_migration_files()
         with self._connect() as connection:
             connection.executescript(
                 """
@@ -386,6 +387,7 @@ class LegalRepository:
                 );
                 """
             )
+            _validate_applied_schema_migrations(connection)
             _ensure_column(
                 connection,
                 self.backend,
@@ -1586,9 +1588,7 @@ def _record_schema_migration(connection: DatabaseConnection, version: str) -> No
 
 
 def _record_schema_migrations_from_files(connection: DatabaseConnection) -> None:
-    if not MIGRATIONS_DIR.exists():
-        return
-    for migration_path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for migration_path in _migration_paths():
         version = migration_path.stem
         row = connection.execute(
             """
@@ -1603,6 +1603,56 @@ def _record_schema_migrations_from_files(connection: DatabaseConnection) -> None
             continue
         connection.executescript(migration_path.read_text(encoding="utf-8"))
         _record_schema_migration(connection, version)
+
+
+def _validate_applied_schema_migrations(connection: DatabaseConnection) -> None:
+    known_versions = {path.stem for path in _migration_paths()}
+    if not known_versions:
+        known_versions = {SCHEMA_VERSION}
+    rows = connection.execute(
+        """
+        SELECT version
+        FROM schema_migrations
+        ORDER BY version
+        """
+    ).fetchall()
+    applied_versions = {str(row[0]) for row in rows}
+    unknown_versions = sorted(applied_versions - known_versions)
+    if unknown_versions:
+        formatted_versions = ", ".join(unknown_versions)
+        raise RuntimeError(f"Database contains an unknown applied migration: {formatted_versions}.")
+
+
+def _validate_schema_migration_files() -> None:
+    migration_paths = _migration_paths()
+    if not migration_paths:
+        return
+
+    versions = tuple(path.stem for path in migration_paths)
+    if SCHEMA_VERSION != versions[-1]:
+        raise RuntimeError(
+            f"SCHEMA_VERSION must match latest migration file: expected {versions[-1]}, got {SCHEMA_VERSION}."
+        )
+
+    version_numbers = tuple(_migration_version_number(version) for version in versions)
+    expected_numbers = tuple(range(version_numbers[0], version_numbers[-1] + 1))
+    if version_numbers != expected_numbers:
+        missing_numbers = sorted(set(expected_numbers) - set(version_numbers))
+        formatted_missing = ", ".join(f"{number:04d}" for number in missing_numbers)
+        raise RuntimeError(f"Migration files contain a missing migration number: {formatted_missing}.")
+
+
+def _migration_paths() -> tuple[Path, ...]:
+    if not MIGRATIONS_DIR.exists():
+        return ()
+    return tuple(sorted(MIGRATIONS_DIR.glob("*.sql")))
+
+
+def _migration_version_number(version: str) -> int:
+    prefix, separator, _suffix = version.partition("_")
+    if len(prefix) != 4 or separator != "_" or not prefix.isdecimal():
+        raise RuntimeError(f"Migration file has invalid version prefix: {version}.")
+    return int(prefix)
 
 
 def _postgres_sql(sql: str) -> str:

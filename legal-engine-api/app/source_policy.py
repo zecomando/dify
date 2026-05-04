@@ -156,10 +156,13 @@ class SourcePolicy:
         )
 
     def find_authority(self, domain: str) -> AuthorityRule | None:
-        for authority in self.authorities:
-            if domain_matches(domain, authority.domain):
-                return authority
-        return None
+        matching_authorities = [authority for authority in self.authorities if domain_matches(domain, authority.domain)]
+        if not matching_authorities:
+            return None
+        return max(
+            matching_authorities,
+            key=lambda authority: len(authority.domain.removeprefix("www.").lower()),
+        )
 
 
 def get_default_source_policy_path() -> Path:

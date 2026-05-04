@@ -7,6 +7,7 @@ from types import ModuleType
 
 import pytest
 
+import app.repository as repository_module
 from app.config import get_settings
 from app.database_ops import backup_database, migrate_database, restore_database
 from app.repository import LegalRepository, SCHEMA_VERSION
@@ -81,6 +82,47 @@ def test_restore_sqlite_database_requires_overwrite_flag(tmp_path: Path) -> None
 
     assert result.backend == "sqlite"
     assert target_path.exists()
+
+
+def test_migrate_database_rejects_schema_version_behind_latest_migration(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "0002_alpha.sql").write_text("SELECT 1;", encoding="utf-8")
+    (migrations_dir / "0003_beta.sql").write_text("SELECT 1;", encoding="utf-8")
+    monkeypatch.setattr(repository_module, "MIGRATIONS_DIR", migrations_dir)
+    monkeypatch.setattr(repository_module, "SCHEMA_VERSION", "0002_alpha")
+
+    with pytest.raises(RuntimeError, match="SCHEMA_VERSION"):
+        migrate_database(database_path=tmp_path / "legal.sqlite3")
+
+
+def test_migrate_database_rejects_gaps_in_numbered_migration_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / "0002_alpha.sql").write_text("SELECT 1;", encoding="utf-8")
+    (migrations_dir / "0004_gamma.sql").write_text("SELECT 1;", encoding="utf-8")
+    monkeypatch.setattr(repository_module, "MIGRATIONS_DIR", migrations_dir)
+    monkeypatch.setattr(repository_module, "SCHEMA_VERSION", "0004_gamma")
+
+    with pytest.raises(RuntimeError, match="missing migration"):
+        migrate_database(database_path=tmp_path / "legal.sqlite3")
+
+
+def test_migrate_database_rejects_unknown_applied_migrations(tmp_path: Path) -> None:
+    database_path = tmp_path / "legal.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+            ("0004_future_migration", "2026-01-01T00:00:00+00:00"),
+        )
+
+    with pytest.raises(RuntimeError, match="unknown applied migration"):
+        migrate_database(database_path=database_path)
 
 
 def test_postgresql_backup_and_restore_use_pg_tools(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

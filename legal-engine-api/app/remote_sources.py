@@ -308,7 +308,10 @@ def _detect_area(raw_text: str, *, default: str) -> str:
     normalized = raw_text.casefold()
     area_markers = (
         ("proteccao_dados", ("rgpd", "dados pessoais", "proteção de dados", "protecao de dados")),
-        ("contratacao_publica", ("contratação pública", "contratacao publica", "contrato público", "proposta")),
+        (
+            "contratacao_publica",
+            ("contratação pública", "contratacao publica", "contrato público", "public procurement", "proposta"),
+        ),
         ("laboral", ("trabalho", "laboral", "trabalhador", "despedimento")),
         ("fiscal", ("iva", "irc", "irs", "tribut", "fiscal")),
         ("administrativo", ("administrativo", "audiência prévia", "audiencia previa")),
