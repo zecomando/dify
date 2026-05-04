@@ -87,6 +87,15 @@ def parse_remote_legal_source(
         return _parse_eurlex(source_url, raw_text, authority)
     if authority.source == "DRE" or domain_matches_any(domain, ("dre.pt", "diariodarepublica.pt")):
         return _parse_dre(source_url, raw_text, authority)
+    if authority.source in {
+        "DGSI",
+        "CSM_JURISPRUDENCE",
+        "TRIBUNAL_CONSTITUCIONAL",
+        "CURIA",
+        "INFOCURIA",
+        "HUDOC",
+    }:
+        return _parse_case_law(source_url, raw_text, authority)
     return ParsedRemoteLegalSource(
         source_url=source_url,
         raw_text=raw_text,
@@ -135,6 +144,21 @@ def _parse_eurlex(source_url: str, raw_text: str, authority: SourcePolicyAuthori
         document_type=_eurlex_document_type(legal_metadata, authority.allowed_document_types),
         area=(_detect_area(raw_text, default="uniao_europeia"),),
         legal_metadata=legal_metadata,
+        promote_if_valid=True,
+    )
+
+
+def _parse_case_law(source_url: str, raw_text: str, authority: SourcePolicyAuthority) -> ParsedRemoteLegalSource:
+    return ParsedRemoteLegalSource(
+        source_url=source_url,
+        raw_text=raw_text,
+        source=authority.source,
+        jurisdiction=authority.jurisdiction,
+        document_type="case_law"
+        if "case_law" in authority.allowed_document_types
+        else _first_allowed_document_type(authority.allowed_document_types),
+        area=(_case_law_area(raw_text, authority.source),),
+        legal_metadata=_case_law_metadata(source_url, raw_text, authority.source),
         promote_if_valid=True,
     )
 
@@ -204,6 +228,72 @@ def _dre_diploma(raw_text: str) -> str | None:
         if any(marker in normalized for marker in ("decreto", "lei", "portaria", "despacho", "aviso")):
             return candidate.rstrip(".")
     return None
+
+
+def _case_law_metadata(source_url: str, raw_text: str, source: str) -> dict[str, str]:
+    if source in {"DGSI", "CSM_JURISPRUDENCE", "TRIBUNAL_CONSTITUCIONAL"}:
+        return _portuguese_case_law_metadata(source_url, raw_text, source)
+    if source in {"CURIA", "INFOCURIA"}:
+        return _curia_case_law_metadata(source_url, raw_text)
+    if source == "HUDOC":
+        return _hudoc_case_law_metadata(source_url, raw_text)
+    return {"source_url": source_url} if source_url else {}
+
+
+def _portuguese_case_law_metadata(source_url: str, raw_text: str, source: str) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    court = _first_match((r"(?m)^Tribunal:[ \t]*([^\n]+)", r"\b(Supremo Tribunal de Justiça)\b"), raw_text)
+    process_number = _first_match((r"(?m)^Processo(?:\s+n[.ººo]*)?:?[ \t]*([A-Z0-9./-]+)",), raw_text)
+    decision_date = _first_match((r"(?m)^Data(?:\s+do\s+Acórdão)?:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",), raw_text)
+    if source == "TRIBUNAL_CONSTITUCIONAL" and court is None:
+        court = "Tribunal Constitucional"
+    if court:
+        metadata["court"] = court.strip().rstrip(".")
+    if process_number:
+        metadata["process_number"] = process_number.strip().rstrip(".")
+    if decision_date:
+        metadata["decision_date"] = decision_date
+    if source_url:
+        metadata["source_url"] = source_url
+    return metadata
+
+
+def _curia_case_law_metadata(source_url: str, raw_text: str) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    court = _first_match((r"(?m)^Court:[ \t]*([^\n]+)", r"\b(Court of Justice)\b"), raw_text)
+    case_number = _first_match((r"(?m)^Case(?:\s+No\.?)?:?[ \t]*([A-Z]-[0-9]+/[0-9]+)",), raw_text)
+    decision_date = _first_match((r"(?m)^Date:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",), raw_text)
+    if court:
+        metadata["court"] = court.strip().rstrip(".")
+    if case_number:
+        metadata["case_number"] = case_number.strip().rstrip(".")
+    if decision_date:
+        metadata["decision_date"] = decision_date
+    if source_url:
+        metadata["source_url"] = source_url
+    return metadata
+
+
+def _hudoc_case_law_metadata(source_url: str, raw_text: str) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    court = _first_match((r"(?m)^Court:[ \t]*([^\n]+)", r"\b(European Court of Human Rights)\b"), raw_text)
+    application_number = _first_match((r"(?m)^Application\s+no\.?:?[ \t]*([0-9]+/[0-9]+)",), raw_text)
+    decision_date = _first_match((r"(?m)^Date:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",), raw_text)
+    if court:
+        metadata["court"] = court.strip().rstrip(".")
+    if application_number:
+        metadata["application_number"] = application_number.strip().rstrip(".")
+    if decision_date:
+        metadata["decision_date"] = decision_date
+    if source_url:
+        metadata["source_url"] = source_url
+    return metadata
+
+
+def _case_law_area(raw_text: str, source: str) -> str:
+    if source == "TRIBUNAL_CONSTITUCIONAL":
+        return "constitucional"
+    return _detect_area(raw_text, default="jurisprudencia")
 
 
 def _first_match(patterns: Sequence[str], value: str) -> str | None:

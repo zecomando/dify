@@ -373,6 +373,139 @@ def test_crawl_url_fetches_and_ingests_eurlex_source_with_celex(tmp_path: Path):
     assert any(chunk.citation_label == "Artigo 6.º" for chunk in chunks)
 
 
+def test_crawl_url_fetches_and_ingests_dgsi_case_law_with_required_metadata(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.dgsi.pt/jstj.nsf/954f0ce6ad9dd8b980256b5f003fa814/example"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Supremo Tribunal de Justiça</h1>
+            <p>Tribunal: Supremo Tribunal de Justiça</p>
+            <p>Processo: 123/20.0T8LSB.L1.S1</p>
+            <p>Data do Acórdão: 2024-01-11</p>
+            <p>Responsabilidade civil extracontratual.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "DGSI"
+    assert document.status == "chat_ready"
+    assert document.document_type == "case_law"
+    assert document.legal_metadata["court"] == "Supremo Tribunal de Justiça"
+    assert document.legal_metadata["process_number"] == "123/20.0T8LSB.L1.S1"
+    assert document.legal_metadata["decision_date"] == "2024-01-11"
+
+
+def test_crawl_url_fetches_and_ingests_tribunal_constitucional_case_law(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.tribunalconstitucional.pt/tc/acordaos/20240123.html"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão n.º 123/2024</h1>
+            <p>Tribunal Constitucional</p>
+            <p>Processo n.º 456/23</p>
+            <p>Data: 2024-02-08</p>
+            <p>Fiscalização concreta da constitucionalidade.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "TRIBUNAL_CONSTITUCIONAL"
+    assert document.status == "chat_ready"
+    assert document.document_type == "case_law"
+    assert document.area == ("constitucional",)
+    assert document.legal_metadata["court"] == "Tribunal Constitucional"
+    assert document.legal_metadata["process_number"] == "456/23"
+    assert document.legal_metadata["decision_date"] == "2024-02-08"
+
+
+def test_crawl_url_fetches_and_ingests_curia_case_law(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://curia.europa.eu/juris/document/document.jsf?text=&docid=123456"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Judgment of the Court</h1>
+            <p>Court: Court of Justice</p>
+            <p>Case C-311/18</p>
+            <p>Date: 2020-07-16</p>
+            <p>Protection of personal data and transfers to third countries.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "CURIA"
+    assert document.status == "chat_ready"
+    assert document.document_type == "case_law"
+    assert document.legal_metadata["court"] == "Court of Justice"
+    assert document.legal_metadata["case_number"] == "C-311/18"
+    assert document.legal_metadata["decision_date"] == "2020-07-16"
+
+
+def test_crawl_url_fetches_and_ingests_hudoc_case_law(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://hudoc.echr.coe.int/eng?i=001-123456"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>European Court of Human Rights judgment</h1>
+            <p>Court: European Court of Human Rights</p>
+            <p>Application no. 12345/20</p>
+            <p>Date: 2023-03-14</p>
+            <p>Article 6 and fair trial guarantees.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "HUDOC"
+    assert document.status == "chat_ready"
+    assert document.document_type == "case_law"
+    assert document.legal_metadata["court"] == "European Court of Human Rights"
+    assert document.legal_metadata["application_number"] == "12345/20"
+    assert document.legal_metadata["decision_date"] == "2023-03-14"
+
+
 def test_crawl_url_rejects_when_remote_fetch_fails(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(

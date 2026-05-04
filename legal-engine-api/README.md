@@ -23,6 +23,7 @@ uv run --project legal-engine-api ruff check app tests
 uv run --project legal-engine-api ruff format --check app tests
 uv run --project legal-engine-api legal-seed
 uv run --project legal-engine-api legal-demo
+uv run --project legal-engine-api legal-readiness --skip-eval
 uv run --project legal-engine-api uvicorn app.main:app --reload
 ```
 
@@ -35,6 +36,8 @@ Set `LEGAL_ENGINE_DATABASE_URL` to use PostgreSQL instead of SQLite. SQLite rema
 Set `LEGAL_SOURCE_POLICY_PATH` to override the default policy path.
 
 Set `LEGAL_ENGINE_ADMIN_TOKEN` to protect all `/admin/*` endpoints with `X-Admin-Token`.
+
+Use `.env.example` as the non-secret template for local/staging environment variables.
 
 ## Database operations
 
@@ -53,6 +56,17 @@ uv run --project legal-engine-api legal-db-restore --input .data/legal_engine.ba
 ```
 
 When `LEGAL_ENGINE_DATABASE_URL` or `--database-url` is set, backup and restore use `pg_dump` and `pg_restore`.
+
+## Local/staging readiness
+
+Run the readiness gates without paid providers:
+
+```bash
+uv run --project legal-engine-api legal-readiness
+uv run --project legal-engine-api legal-readiness --require-admin-token --database-url "$LEGAL_ENGINE_DATABASE_URL"
+```
+
+The command checks schema initialization, source policy loading, optional admin token presence, seed, deterministic demo, and evaluation gates.
 
 ## Local MVP status
 
@@ -75,7 +89,7 @@ curl http://127.0.0.1:8000/openapi.json
 
 ## Remote crawl MVP
 
-`POST /ingestion/crawl-url` validates the URL against `source-policy.yml`. For supported official DRE and EUR-Lex URLs, it fetches remote HTML/text, normalizes it into raw text, extracts basic legal metadata such as CELEX, persists raw text/chunks/jobs, and promotes to `chat_ready` only when source-policy requirements pass.
+`POST /ingestion/crawl-url` validates the URL against `source-policy.yml`. For supported official DRE, EUR-Lex, DGSI, Tribunal Constitucional, Curia/InfoCuria, and HUDOC URLs, it fetches remote HTML/text, normalizes it into raw text, extracts basic legal metadata such as ELI, CELEX, court, decision date, process/case/application numbers, persists raw text/chunks/jobs, and promotes to `chat_ready` only when source-policy requirements pass.
 
 Tests use an injected fake fetcher and do not call live official websites.
 
