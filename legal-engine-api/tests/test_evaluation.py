@@ -1,5 +1,8 @@
 from pathlib import Path
+from types import SimpleNamespace
 
+from app.config import get_settings
+from app.evaluate import main as evaluate_main
 from app.evaluation import evaluation_run_to_response, persist_evaluation_run, run_evaluation, seed_evaluation_corpus
 from app.repository import LegalRepository
 from app.source_policy import SourcePolicy
@@ -110,3 +113,48 @@ def test_persist_evaluation_run_stores_failed_cases(tmp_path: Path):
     assert response.passed is False
     assert response.failed_cases_count == 1
     assert response.failed_cases[0].id == "q004"
+
+
+def test_evaluate_cli_uses_database_url_from_environment(tmp_path: Path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    evals_dir = tmp_path / "evals"
+    evals_dir.mkdir()
+
+    def fake_run_evaluation(
+        evals_dir: Path,
+        source_policy_path: Path,
+        database_path: Path | None = None,
+        database_url: str | None = None,
+    ) -> object:
+        captured["evals_dir"] = evals_dir
+        captured["source_policy_path"] = source_policy_path
+        captured["database_path"] = database_path
+        captured["database_url"] = database_url
+        return SimpleNamespace(
+            passed=True,
+            quality_gates=[],
+            metrics=SimpleNamespace(total_cases=0, successful_cases=0, failed_cases=0, audit_coverage=1.0),
+        )
+
+    monkeypatch.setenv("LEGAL_ENGINE_DATABASE_URL", "postgresql://localhost/legal")
+    get_settings.cache_clear()
+    monkeypatch.setattr("app.evaluate.run_evaluation", fake_run_evaluation)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "legal-eval",
+            "--evals-dir",
+            str(evals_dir),
+            "--source-policy",
+            str(POLICY_PATH),
+        ],
+    )
+
+    try:
+        exit_code = evaluate_main()
+    finally:
+        get_settings.cache_clear()
+
+    assert exit_code == 0
+    assert captured["database_url"] == "postgresql://localhost/legal"
+    assert captured["database_path"] is None

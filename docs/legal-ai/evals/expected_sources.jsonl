@@ -1,4 +1,13 @@
 {"question_id":"q001","expected_sources":[{"document_hint":"Código dos Contratos Públicos","domain_any":["diariodarepublica.pt","dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
 {"question_id":"q003","expected_sources":[{"document_hint":"Código do Procedimento Administrativo","domain_any":["diariodarepublica.pt","dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
+{"question_id":"q004","expected_sources":[{"document_hint":"Código Civil","domain_any":["dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
 {"question_id":"q007","expected_sources":[{"document_hint":"Regulamento Geral sobre a Proteção de Dados","domain_any":["eur-lex.europa.eu"],"required_metadata":["article_number","celex","source_url"]}]}
 {"question_id":"q010","expected_sources":[{"document_hint":"TED","domain_any":["ted.europa.eu","api.ted.europa.eu"],"required_metadata":["source_url"]}]}
+{"question_id":"q011","expected_sources":[{"document_hint":"Código Civil","domain_any":["dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
+{"question_id":"q012","expected_sources":[{"document_hint":"Código do Trabalho","domain_any":["dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
+{"question_id":"q013","expected_sources":[{"document_hint":"Lei Geral Tributária","domain_any":["dre.pt"],"required_metadata":["article_number","source_url","is_current"]}]}
+{"question_id":"q014","expected_sources":[{"document_hint":"DGSI","domain_any":["dgsi.pt"],"required_metadata":["court","decision_date","process_number","source_url"]}]}
+{"question_id":"q015","expected_sources":[{"document_hint":"Tribunal Constitucional","domain_any":["tribunalconstitucional.pt"],"required_metadata":["court","decision_date","process_number","source_url"]}]}
+{"question_id":"q016","expected_sources":[{"document_hint":"Curia","domain_any":["curia.europa.eu"],"required_metadata":["court","decision_date","case_number","source_url"]}]}
+{"question_id":"q017","expected_sources":[{"document_hint":"HUDOC","domain_any":["hudoc.echr.coe.int"],"required_metadata":["court","decision_date","application_number","source_url"]}]}
+{"question_id":"q018","expected_sources":[{"document_hint":"BASE","domain_any":["base.gov.pt"],"required_metadata":["source_url"]}]}

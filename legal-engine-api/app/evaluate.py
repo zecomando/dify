@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from app.config import get_settings
 from app.evaluation import run_evaluation
 from app.source_policy import get_default_source_policy_path
 
@@ -25,10 +26,17 @@ def main() -> int:
         type=Path,
         default=None,
     )
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="PostgreSQL database URL. Defaults to LEGAL_ENGINE_DATABASE_URL when set.",
+    )
     parser.add_argument("--json", action="store_true", help="Print the full evaluation result as JSON.")
     args = parser.parse_args()
 
-    result = run_evaluation(args.evals_dir, args.source_policy, args.database_path)
+    settings = get_settings()
+    database_url = args.database_url or settings.database_url
+    result = run_evaluation(args.evals_dir, args.source_policy, args.database_path, database_url)
     if args.json:
         print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
     else:

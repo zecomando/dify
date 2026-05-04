@@ -49,6 +49,7 @@ def answer_chat(
         area=classification.area,
         document_types=payload.document_types or classification.document_types,
         current_only=classification.current_only if payload.current_only is None else payload.current_only,
+        as_of_date=payload.as_of_date,
         top_k_dense=payload.top_k_dense,
         top_k_sparse=payload.top_k_sparse,
         mode=payload.mode,

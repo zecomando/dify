@@ -1,12 +1,86 @@
 from __future__ import annotations
 
+import importlib
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol, cast
+
+
+SCHEMA_VERSION = "0002_document_temporal_metadata"
+MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
+
+
+class DatabaseCursor(Protocol):
+    def fetchone(self) -> tuple[object, ...] | None: ...
+
+    def fetchall(self) -> list[tuple[object, ...]]: ...
+
+
+class DatabaseConnection(Protocol):
+    def execute(self, sql: str, parameters: Sequence[object] = ()) -> DatabaseCursor: ...
+
+    def executemany(self, sql: str, parameters: Iterable[Sequence[object]]) -> object: ...
+
+    def executescript(self, sql: str) -> object: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _PsycopgCursor(Protocol):
+    def execute(self, query: str, params: Sequence[object] | None = None) -> object: ...
+
+    def executemany(self, query: str, params_seq: Iterable[Sequence[object]]) -> object: ...
+
+    def fetchone(self) -> tuple[object, ...] | None: ...
+
+    def fetchall(self) -> list[tuple[object, ...]]: ...
+
+
+class _PsycopgConnection(Protocol):
+    def cursor(self) -> _PsycopgCursor: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _PostgresConnection:
+    def __init__(self, connection: _PsycopgConnection) -> None:
+        self._connection = connection
+
+    def execute(self, sql: str, parameters: Sequence[object] = ()) -> DatabaseCursor:
+        cursor = self._connection.cursor()
+        cursor.execute(_postgres_sql(sql), _postgres_parameters(parameters))
+        return cast(DatabaseCursor, cursor)
+
+    def executemany(self, sql: str, parameters: Iterable[Sequence[object]]) -> object:
+        cursor = self._connection.cursor()
+        return cursor.executemany(_postgres_sql(sql), tuple(_postgres_parameters(item) for item in parameters))
+
+    def executescript(self, sql: str) -> object:
+        for statement in _split_sql_script(sql):
+            self.execute(statement)
+        return None
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+    def close(self) -> None:
+        self._connection.close()
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,8 +97,15 @@ class LegalDocumentRecord:
     is_consolidated: bool
     legal_value_warning: str
     area: tuple[str, ...]
+    legal_metadata: dict[str, str]
     created_at: str
     updated_at: str
+    version_label: str = "current"
+    valid_from: str | None = None
+    valid_until: str | None = None
+    supersedes_document_id: str | None = None
+    archived_at: str | None = None
+    change_note: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +127,8 @@ class SearchableChunkRecord:
     source: str
     jurisdiction: str
     document_type: str
+    area: tuple[str, ...]
+    legal_metadata: dict[str, str]
     source_url: str
     is_current: bool
     is_consolidated: bool
@@ -54,6 +137,19 @@ class SearchableChunkRecord:
     citation_label: str | None
     text_content: str
     token_count: int | None
+    version_label: str = "current"
+    valid_from: str | None = None
+    valid_until: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LegalChunkEmbeddingRecord:
+    chunk_id: str
+    model: str
+    dimensions: int
+    vector: tuple[float, ...]
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +196,17 @@ class AnswerAuditRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class AnswerFeedbackRecord:
+    id: str
+    audit_id: str
+    rating: str
+    comment: str | None
+    user_id: str | None
+    session_id: str | None
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class EvaluationRunRecord:
     id: str
     passed: bool
@@ -114,10 +221,16 @@ class EvaluationRunRecord:
 
 
 class LegalRepository:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, database_url: str | None = None) -> None:
         self.database_path = database_path
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.database_url = database_url
+        if self.database_url is None:
+            self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize_schema()
+
+    @property
+    def backend(self) -> str:
+        return "postgresql" if self.database_url is not None else "sqlite"
 
     def initialize_schema(self) -> None:
         with self._connect() as connection:
@@ -136,8 +249,15 @@ class LegalRepository:
                     is_consolidated INTEGER NOT NULL,
                     legal_value_warning TEXT NOT NULL,
                     area_json TEXT NOT NULL,
+                    legal_metadata_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    version_label TEXT NOT NULL DEFAULT 'current',
+                    valid_from TEXT,
+                    valid_until TEXT,
+                    supersedes_document_id TEXT REFERENCES legal_documents(id),
+                    archived_at TEXT,
+                    change_note TEXT NOT NULL DEFAULT ''
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_legal_documents_source ON legal_documents(source);
@@ -159,6 +279,24 @@ class LegalRepository:
 
                 CREATE INDEX IF NOT EXISTS idx_legal_chunks_document_id ON legal_chunks(document_id);
                 CREATE INDEX IF NOT EXISTS idx_legal_chunks_chunk_type ON legal_chunks(chunk_type);
+
+                CREATE TABLE IF NOT EXISTS legal_chunk_embeddings (
+                    chunk_id TEXT PRIMARY KEY REFERENCES legal_chunks(id) ON DELETE CASCADE,
+                    model TEXT NOT NULL,
+                    dimensions INTEGER NOT NULL,
+                    vector_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_legal_chunk_embeddings_model ON legal_chunk_embeddings(model);
+
+                CREATE TABLE IF NOT EXISTS legal_document_raw_texts (
+                    document_id TEXT PRIMARY KEY REFERENCES legal_documents(id) ON DELETE CASCADE,
+                    raw_text TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
 
                 CREATE TABLE IF NOT EXISTS source_ingestion_jobs (
                     id TEXT PRIMARY KEY,
@@ -210,6 +348,20 @@ class LegalRepository:
                 CREATE INDEX IF NOT EXISTS idx_answer_audits_verdict ON answer_audits(verdict);
                 CREATE INDEX IF NOT EXISTS idx_answer_audits_abstained ON answer_audits(abstained);
 
+                CREATE TABLE IF NOT EXISTS answer_feedback (
+                    id TEXT PRIMARY KEY,
+                    audit_id TEXT NOT NULL REFERENCES answer_audits(id) ON DELETE CASCADE,
+                    rating TEXT NOT NULL,
+                    comment TEXT,
+                    user_id TEXT,
+                    session_id TEXT,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_answer_feedback_audit ON answer_feedback(audit_id);
+                CREATE INDEX IF NOT EXISTS idx_answer_feedback_rating ON answer_feedback(rating);
+                CREATE INDEX IF NOT EXISTS idx_answer_feedback_created_at ON answer_feedback(created_at);
+
                 CREATE TABLE IF NOT EXISTS evaluation_runs (
                     id TEXT PRIMARY KEY,
                     passed INTEGER NOT NULL,
@@ -225,8 +377,40 @@ class LegalRepository:
 
                 CREATE INDEX IF NOT EXISTS idx_evaluation_runs_created_at ON evaluation_runs(created_at);
                 CREATE INDEX IF NOT EXISTS idx_evaluation_runs_passed ON evaluation_runs(passed);
+
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                );
                 """
             )
+            _ensure_column(
+                connection,
+                self.backend,
+                "legal_documents",
+                "legal_metadata_json",
+                "TEXT NOT NULL DEFAULT '{}'",
+            )
+            _ensure_column(
+                connection,
+                self.backend,
+                "legal_documents",
+                "version_label",
+                "TEXT NOT NULL DEFAULT 'current'",
+            )
+            _ensure_column(connection, self.backend, "legal_documents", "valid_from", "TEXT")
+            _ensure_column(connection, self.backend, "legal_documents", "valid_until", "TEXT")
+            _ensure_column(connection, self.backend, "legal_documents", "supersedes_document_id", "TEXT")
+            _ensure_column(connection, self.backend, "legal_documents", "archived_at", "TEXT")
+            _ensure_column(
+                connection,
+                self.backend,
+                "legal_documents",
+                "change_note",
+                "TEXT NOT NULL DEFAULT ''",
+            )
+            _record_schema_migrations_from_files(connection)
+            _record_schema_migration(connection, SCHEMA_VERSION)
 
     def create_document(self, document: LegalDocumentRecord) -> LegalDocumentRecord:
         with self._connect() as connection:
@@ -245,9 +429,16 @@ class LegalRepository:
                     is_consolidated,
                     legal_value_warning,
                     area_json,
+                    legal_metadata_json,
                     created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    updated_at,
+                    version_label,
+                    valid_from,
+                    valid_until,
+                    supersedes_document_id,
+                    archived_at,
+                    change_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     document.id,
@@ -262,8 +453,15 @@ class LegalRepository:
                     int(document.is_consolidated),
                     document.legal_value_warning,
                     json.dumps(list(document.area), ensure_ascii=False),
+                    json.dumps(document.legal_metadata, ensure_ascii=False),
                     document.created_at,
                     document.updated_at,
+                    document.version_label,
+                    document.valid_from,
+                    document.valid_until,
+                    document.supersedes_document_id,
+                    document.archived_at,
+                    document.change_note,
                 ),
             )
         return document
@@ -295,6 +493,105 @@ class LegalRepository:
                 ),
             )
         return chunk
+
+    def save_chunk_embedding(
+        self,
+        *,
+        chunk_id: str,
+        model: str,
+        dimensions: int,
+        vector: tuple[float, ...],
+        timestamp: str,
+    ) -> LegalChunkEmbeddingRecord:
+        vector_json = json.dumps(list(vector), ensure_ascii=False)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO legal_chunk_embeddings (
+                    chunk_id,
+                    model,
+                    dimensions,
+                    vector_json,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(chunk_id) DO UPDATE SET
+                    model = excluded.model,
+                    dimensions = excluded.dimensions,
+                    vector_json = excluded.vector_json,
+                    updated_at = excluded.updated_at
+                """,
+                (chunk_id, model, dimensions, vector_json, timestamp, timestamp),
+            )
+        return LegalChunkEmbeddingRecord(
+            chunk_id=chunk_id,
+            model=model,
+            dimensions=dimensions,
+            vector=vector,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+
+    def get_chunk_embedding(self, chunk_id: str, *, model: str | None = None) -> LegalChunkEmbeddingRecord | None:
+        clauses = ["chunk_id = ?"]
+        params: list[object] = [chunk_id]
+        if model is not None:
+            clauses.append("model = ?")
+            params.append(model)
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT
+                    chunk_id,
+                    model,
+                    dimensions,
+                    vector_json,
+                    created_at,
+                    updated_at
+                FROM legal_chunk_embeddings
+                WHERE {" AND ".join(clauses)}
+                LIMIT 1
+                """,
+                tuple(params),
+            ).fetchone()
+        if row is None:
+            return None
+        return _chunk_embedding_from_row(row)
+
+    def count_chunk_embeddings(self, *, model: str | None = None) -> int:
+        clauses: list[str] = []
+        params: list[object] = []
+        if model is not None:
+            clauses.append("model = ?")
+            params.append(model)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM legal_chunk_embeddings
+                {where_clause}
+                """,
+                tuple(params),
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def save_document_raw_text(self, document_id: str, raw_text: str, timestamp: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO legal_document_raw_texts (
+                    document_id,
+                    raw_text,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(document_id) DO UPDATE SET
+                    raw_text = excluded.raw_text,
+                    updated_at = excluded.updated_at
+                """,
+                (document_id, raw_text, timestamp, timestamp),
+            )
 
     def create_job(self, job: IngestionJobRecord) -> IngestionJobRecord:
         with self._connect() as connection:
@@ -390,6 +687,32 @@ class LegalRepository:
             )
         return audit
 
+    def create_answer_feedback(self, feedback: AnswerFeedbackRecord) -> AnswerFeedbackRecord:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO answer_feedback (
+                    id,
+                    audit_id,
+                    rating,
+                    comment,
+                    user_id,
+                    session_id,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    feedback.id,
+                    feedback.audit_id,
+                    feedback.rating,
+                    feedback.comment,
+                    feedback.user_id,
+                    feedback.session_id,
+                    feedback.created_at,
+                ),
+            )
+        return feedback
+
     def create_evaluation_run(self, run: EvaluationRunRecord) -> EvaluationRunRecord:
         with self._connect() as connection:
             connection.execute(
@@ -439,12 +762,56 @@ class LegalRepository:
                     is_consolidated,
                     legal_value_warning,
                     area_json,
+                    legal_metadata_json,
                     created_at,
-                    updated_at
+                    updated_at,
+                    version_label,
+                    valid_from,
+                    valid_until,
+                    supersedes_document_id,
+                    archived_at,
+                    change_note
                 FROM legal_documents
                 WHERE id = ?
                 """,
                 (document_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _document_from_row(row)
+
+    def get_document_by_source_url(self, source_url: str) -> LegalDocumentRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    source,
+                    jurisdiction,
+                    document_type,
+                    title,
+                    source_url,
+                    status,
+                    sha256,
+                    is_current,
+                    is_consolidated,
+                    legal_value_warning,
+                    area_json,
+                    legal_metadata_json,
+                    created_at,
+                    updated_at,
+                    version_label,
+                    valid_from,
+                    valid_until,
+                    supersedes_document_id,
+                    archived_at,
+                    change_note
+                FROM legal_documents
+                WHERE source_url = ?
+                ORDER BY updated_at DESC, created_at DESC, id ASC
+                LIMIT 1
+                """,
+                (source_url,),
             ).fetchone()
         if row is None:
             return None
@@ -491,14 +858,58 @@ class LegalRepository:
                     is_consolidated,
                     legal_value_warning,
                     area_json,
+                    legal_metadata_json,
                     created_at,
-                    updated_at
+                    updated_at,
+                    version_label,
+                    valid_from,
+                    valid_until,
+                    supersedes_document_id,
+                    archived_at,
+                    change_note
                 FROM legal_documents
                 {where_clause}
                 ORDER BY updated_at DESC, created_at DESC, id ASC
                 LIMIT ? OFFSET ?
                 """,
                 (*params, limit, offset),
+            ).fetchall()
+        return tuple(_document_from_row(row) for row in rows)
+
+    def list_documents_by_ids(self, document_ids: tuple[str, ...]) -> tuple[LegalDocumentRecord, ...]:
+        if not document_ids:
+            return ()
+        placeholders = ",".join("?" for _ in document_ids)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    id,
+                    source,
+                    jurisdiction,
+                    document_type,
+                    title,
+                    source_url,
+                    status,
+                    sha256,
+                    is_current,
+                    is_consolidated,
+                    legal_value_warning,
+                    area_json,
+                    legal_metadata_json,
+                    created_at,
+                    updated_at,
+                    version_label,
+                    valid_from,
+                    valid_until,
+                    supersedes_document_id,
+                    archived_at,
+                    change_note
+                FROM legal_documents
+                WHERE id IN ({placeholders})
+                ORDER BY updated_at DESC, created_at DESC, id ASC
+                """,
+                document_ids,
             ).fetchall()
         return tuple(_document_from_row(row) for row in rows)
 
@@ -557,6 +968,69 @@ class LegalRepository:
             ).fetchall()
         return tuple(_chunk_from_row(row) for row in rows)
 
+    def count_chunks_by_document(self, document_id: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM legal_chunks
+                WHERE document_id = ?
+                """,
+                (document_id,),
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def get_document_raw_text(self, document_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT raw_text
+                FROM legal_document_raw_texts
+                WHERE document_id = ?
+                """,
+                (document_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row[0])
+
+    def replace_document_chunks(self, document_id: str, chunks: tuple[LegalChunkRecord, ...]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                DELETE FROM legal_chunks
+                WHERE document_id = ?
+                """,
+                (document_id,),
+            )
+            connection.executemany(
+                """
+                INSERT INTO legal_chunks (
+                    id,
+                    document_id,
+                    chunk_type,
+                    structural_path,
+                    citation_label,
+                    text_content,
+                    token_count,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                tuple(
+                    (
+                        chunk.id,
+                        chunk.document_id,
+                        chunk.chunk_type,
+                        chunk.structural_path,
+                        chunk.citation_label,
+                        chunk.text_content,
+                        chunk.token_count,
+                        chunk.created_at,
+                    )
+                    for chunk in chunks
+                ),
+            )
+
     def list_searchable_chunks(self, *, current_only: bool) -> tuple[SearchableChunkRecord, ...]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -567,6 +1041,8 @@ class LegalRepository:
                     d.source,
                     d.jurisdiction,
                     d.document_type,
+                    d.area_json,
+                    d.legal_metadata_json,
                     d.source_url,
                     d.is_current,
                     d.is_consolidated,
@@ -574,7 +1050,10 @@ class LegalRepository:
                     c.chunk_type,
                     c.citation_label,
                     c.text_content,
-                    c.token_count
+                    c.token_count,
+                    d.version_label,
+                    d.valid_from,
+                    d.valid_until
                 FROM legal_chunks c
                 INNER JOIN legal_documents d ON d.id = c.document_id
                 WHERE d.status = 'chat_ready'
@@ -608,6 +1087,80 @@ class LegalRepository:
         if row is None:
             return None
         return _job_from_row(row)
+
+    def list_jobs(
+        self,
+        *,
+        status: str | None = None,
+        mode: str | None = None,
+        source: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[IngestionJobRecord, ...]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if mode is not None:
+            clauses.append("mode = ?")
+            params.append(mode)
+        if source is not None:
+            clauses.append("source = ?")
+            params.append(source)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    id,
+                    source,
+                    source_url,
+                    requested_by,
+                    mode,
+                    status,
+                    error_message,
+                    document_id,
+                    created_at,
+                    updated_at
+                FROM source_ingestion_jobs
+                {where_clause}
+                ORDER BY updated_at DESC, created_at DESC, id ASC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            ).fetchall()
+        return tuple(_job_from_row(row) for row in rows)
+
+    def count_jobs(
+        self,
+        *,
+        status: str | None = None,
+        mode: str | None = None,
+        source: str | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        params: list[object] = []
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if mode is not None:
+            clauses.append("mode = ?")
+            params.append(mode)
+        if source is not None:
+            clauses.append("source = ?")
+            params.append(source)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM source_ingestion_jobs
+                {where_clause}
+                """,
+                tuple(params),
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
 
     def get_answer_audit(self, audit_id: str) -> AnswerAuditRecord | None:
         with self._connect() as connection:
@@ -737,6 +1290,85 @@ class LegalRepository:
             ).fetchone()
         return int(row[0]) if row is not None else 0
 
+    def list_answer_feedback(
+        self,
+        *,
+        audit_id: str | None = None,
+        rating: str | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[AnswerFeedbackRecord, ...]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if audit_id is not None:
+            clauses.append("audit_id = ?")
+            params.append(audit_id)
+        if rating is not None:
+            clauses.append("rating = ?")
+            params.append(rating)
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    id,
+                    audit_id,
+                    rating,
+                    comment,
+                    user_id,
+                    session_id,
+                    created_at
+                FROM answer_feedback
+                {where_clause}
+                ORDER BY created_at DESC, id ASC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            ).fetchall()
+        return tuple(_answer_feedback_from_row(row) for row in rows)
+
+    def count_answer_feedback(
+        self,
+        *,
+        audit_id: str | None = None,
+        rating: str | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        params: list[object] = []
+        if audit_id is not None:
+            clauses.append("audit_id = ?")
+            params.append(audit_id)
+        if rating is not None:
+            clauses.append("rating = ?")
+            params.append(rating)
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM answer_feedback
+                {where_clause}
+                """,
+                tuple(params),
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
+
     def get_evaluation_run(self, run_id: str) -> EvaluationRunRecord | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -821,21 +1453,51 @@ class LegalRepository:
             return None
 
         updated_at = utc_now_iso()
+        archived_at = updated_at if target_status == "archived" else existing_document.archived_at
+        is_current = False if target_status == "archived" else existing_document.is_current
         with self._connect() as connection:
             connection.execute(
                 """
                 UPDATE legal_documents
-                SET status = ?, updated_at = ?
+                SET status = ?, is_current = ?, archived_at = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (target_status, updated_at, document_id),
+                (target_status, int(is_current), archived_at, updated_at, document_id),
             )
         return self.get_document(document_id)
 
+    def archive_current_document_version(
+        self,
+        *,
+        source_url: str,
+        valid_until: str | None,
+        change_note: str,
+    ) -> LegalDocumentRecord | None:
+        existing_document = self.get_document_by_source_url(source_url)
+        if existing_document is None or not existing_document.is_current:
+            return None
+
+        archived_at = utc_now_iso()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE legal_documents
+                SET
+                    status = ?,
+                    is_current = ?,
+                    valid_until = ?,
+                    archived_at = ?,
+                    change_note = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                ("archived", 0, valid_until, archived_at, change_note, archived_at, existing_document.id),
+            )
+        return self.get_document(existing_document.id)
+
     @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.database_path)
-        connection.execute("PRAGMA foreign_keys = ON")
+    def _connect(self) -> Iterator[DatabaseConnection]:
+        connection = self._open_connection()
         try:
             yield connection
         except Exception:
@@ -846,14 +1508,113 @@ class LegalRepository:
         finally:
             connection.close()
 
+    def _open_connection(self) -> DatabaseConnection:
+        if self.database_url is None:
+            connection = sqlite3.connect(self.database_path)
+            connection.execute("PRAGMA foreign_keys = ON")
+            return cast(DatabaseConnection, connection)
+        try:
+            psycopg = importlib.import_module("psycopg")
+        except ModuleNotFoundError as exc:
+            raise RuntimeError("PostgreSQL backend requires the optional psycopg package.") from exc
+        return _PostgresConnection(cast(_PsycopgConnection, psycopg.connect(self.database_url)))
+
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _ensure_column(
+    connection: DatabaseConnection,
+    backend: str,
+    table_name: str,
+    column_name: str,
+    definition: str,
+) -> None:
+    if backend == "postgresql":
+        row = connection.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = ?
+              AND column_name = ?
+            LIMIT 1
+            """,
+            (table_name, column_name),
+        ).fetchone()
+        if row is not None:
+            return
+    else:
+        rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        if any(str(row[1]) == column_name for row in rows):
+            return
+    connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
+def _record_schema_migration(connection: DatabaseConnection, version: str) -> None:
+    connection.execute(
+        """
+        INSERT INTO schema_migrations (version, applied_at)
+        VALUES (?, ?)
+        ON CONFLICT(version) DO NOTHING
+        """,
+        (version, utc_now_iso()),
+    )
+
+
+def _record_schema_migrations_from_files(connection: DatabaseConnection) -> None:
+    if not MIGRATIONS_DIR.exists():
+        return
+    for migration_path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        version = migration_path.stem
+        row = connection.execute(
+            """
+            SELECT 1
+            FROM schema_migrations
+            WHERE version = ?
+            LIMIT 1
+            """,
+            (version,),
+        ).fetchone()
+        if row is not None:
+            continue
+        connection.executescript(migration_path.read_text(encoding="utf-8"))
+        _record_schema_migration(connection, version)
+
+
+def _postgres_sql(sql: str) -> str:
+    return sql.replace("?", "%s")
+
+
+def _postgres_parameters(parameters: Sequence[object]) -> tuple[object, ...]:
+    return tuple(int(parameter) if isinstance(parameter, bool) else parameter for parameter in parameters)
+
+
+def _split_sql_script(sql: str) -> tuple[str, ...]:
+    return tuple(statement.strip() for statement in sql.split(";") if statement.strip())
+
+
+def _json_string_dict(value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    loaded = json.loads(str(value))
+    if not isinstance(loaded, dict):
+        return {}
+    return {str(key): str(item) for key, item in loaded.items() if item is not None}
+
+
+def _optional_row_str(row: sqlite3.Row | tuple[object, ...], index: int) -> str | None:
+    if len(row) <= index or row[index] is None:
+        return None
+    return str(row[index])
+
+
 def _document_from_row(row: sqlite3.Row | tuple[object, ...]) -> LegalDocumentRecord:
     area_value = row[11]
+    legal_metadata_value = row[12]
     area = tuple(json.loads(str(area_value))) if area_value else ()
+    legal_metadata = _json_string_dict(legal_metadata_value)
     return LegalDocumentRecord(
         id=str(row[0]),
         source=str(row[1]),
@@ -867,8 +1628,15 @@ def _document_from_row(row: sqlite3.Row | tuple[object, ...]) -> LegalDocumentRe
         is_consolidated=bool(row[9]),
         legal_value_warning=str(row[10]),
         area=area,
-        created_at=str(row[12]),
-        updated_at=str(row[13]),
+        legal_metadata=legal_metadata,
+        created_at=str(row[13]),
+        updated_at=str(row[14]),
+        version_label=str(row[15]) if len(row) > 15 and row[15] is not None else "current",
+        valid_from=_optional_row_str(row, 16),
+        valid_until=_optional_row_str(row, 17),
+        supersedes_document_id=_optional_row_str(row, 18),
+        archived_at=_optional_row_str(row, 19),
+        change_note=str(row[20]) if len(row) > 20 and row[20] is not None else "",
     )
 
 
@@ -886,20 +1654,42 @@ def _chunk_from_row(row: sqlite3.Row | tuple[object, ...]) -> LegalChunkRecord:
 
 
 def _searchable_chunk_from_row(row: sqlite3.Row | tuple[object, ...]) -> SearchableChunkRecord:
+    area_value = row[5]
+    legal_metadata_value = row[6]
+    area = tuple(json.loads(str(area_value))) if area_value else ()
+    legal_metadata = _json_string_dict(legal_metadata_value)
     return SearchableChunkRecord(
         chunk_id=str(row[0]),
         document_id=str(row[1]),
         source=str(row[2]),
         jurisdiction=str(row[3]),
         document_type=str(row[4]),
-        source_url=str(row[5]),
-        is_current=bool(row[6]),
-        is_consolidated=bool(row[7]),
-        legal_value_warning=str(row[8]),
-        chunk_type=str(row[9]),
-        citation_label=str(row[10]) if row[10] is not None else None,
-        text_content=str(row[11]),
-        token_count=int(row[12]) if row[12] is not None else None,
+        area=area,
+        legal_metadata=legal_metadata,
+        source_url=str(row[7]),
+        is_current=bool(row[8]),
+        is_consolidated=bool(row[9]),
+        legal_value_warning=str(row[10]),
+        chunk_type=str(row[11]),
+        citation_label=str(row[12]) if row[12] is not None else None,
+        text_content=str(row[13]),
+        token_count=int(row[14]) if row[14] is not None else None,
+        version_label=str(row[15]) if len(row) > 15 and row[15] is not None else "current",
+        valid_from=_optional_row_str(row, 16),
+        valid_until=_optional_row_str(row, 17),
+    )
+
+
+def _chunk_embedding_from_row(row: sqlite3.Row | tuple[object, ...]) -> LegalChunkEmbeddingRecord:
+    vector_value = json.loads(str(row[3]))
+    vector = tuple(float(value) for value in vector_value) if isinstance(vector_value, list) else ()
+    return LegalChunkEmbeddingRecord(
+        chunk_id=str(row[0]),
+        model=str(row[1]),
+        dimensions=int(row[2]),
+        vector=vector,
+        created_at=str(row[4]),
+        updated_at=str(row[5]),
     )
 
 
@@ -945,6 +1735,18 @@ def _answer_audit_from_row(row: sqlite3.Row | tuple[object, ...]) -> AnswerAudit
         latency_ms=int(row[22]),
         estimated_cost_usd=float(row[23]),
         created_at=str(row[24]),
+    )
+
+
+def _answer_feedback_from_row(row: sqlite3.Row | tuple[object, ...]) -> AnswerFeedbackRecord:
+    return AnswerFeedbackRecord(
+        id=str(row[0]),
+        audit_id=str(row[1]),
+        rating=str(row[2]),
+        comment=str(row[3]) if row[3] is not None else None,
+        user_id=str(row[4]) if row[4] is not None else None,
+        session_id=str(row[5]) if row[5] is not None else None,
+        created_at=str(row[6]),
     )
 
 

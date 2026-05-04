@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from secrets import compare_digest
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader
@@ -8,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.audit import answer_audit_to_response
 from app.config import get_settings
+from app.corpus import InitialCorpusSeedResult, seed_initial_corpus
 from app.engine import (
     build_evidence,
     classify_query,
@@ -27,19 +29,28 @@ from app.ingestion import crawl_url, ingest_source, promote_document, reindex_co
 from app.pipeline import answer_chat
 from app.repository import (
     AnswerAuditRecord,
+    AnswerFeedbackRecord,
     EvaluationRunRecord,
+    IngestionJobRecord,
     LegalChunkRecord,
     LegalDocumentRecord,
     LegalRepository,
+    utc_now_iso,
 )
 from app.schemas import (
+    AdminDiagnosticsResponse,
     AdminDocumentStatusRequest,
     AdminDocumentStatusResponse,
+    AdminMetricsResponse,
     AnswerGenerateRequest,
     AnswerGenerateResponse,
     AnswerAuditResponse,
     AnswerAuditListResponse,
     AnswerAuditSummaryResponse,
+    AnswerFeedbackListResponse,
+    AnswerFeedbackRating,
+    AnswerFeedbackRequest,
+    AnswerFeedbackResponse,
     AnswerValidateRequest,
     AnswerValidateResponse,
     ChatAnswerRequest,
@@ -52,7 +63,11 @@ from app.schemas import (
     EvidenceBuildResponse,
     EvaluationRunListResponse,
     EvaluationRunSummaryResponse,
+    InitialCorpusSeedResponse,
+    IngestionJobDetailResponse,
+    IngestionJobListResponse,
     IngestionJobResponse,
+    IngestionJobStatus,
     IngestionSourceRequest,
     LegalChunkListResponse,
     LegalChunkResponse,
@@ -92,7 +107,8 @@ def get_source_policy() -> SourcePolicy:
 
 
 def get_repository() -> LegalRepository:
-    return LegalRepository(get_settings().database_path)
+    settings = get_settings()
+    return LegalRepository(settings.database_path, settings.database_url)
 
 
 def require_admin_token(x_admin_token: str | None = Security(admin_token_header)) -> None:
@@ -120,8 +136,29 @@ def _legal_document_to_response(document: LegalDocumentRecord) -> LegalDocumentR
         is_consolidated=document.is_consolidated,
         legal_value_warning=document.legal_value_warning,
         area=list(document.area),
+        legal_metadata=document.legal_metadata,
+        version_label=document.version_label,
+        valid_from=document.valid_from,
+        valid_until=document.valid_until,
+        supersedes_document_id=document.supersedes_document_id,
+        archived_at=document.archived_at,
+        change_note=document.change_note,
         created_at=document.created_at,
         updated_at=document.updated_at,
+    )
+
+
+def _initial_corpus_seed_to_response(result: InitialCorpusSeedResult) -> InitialCorpusSeedResponse:
+    return InitialCorpusSeedResponse(
+        total_seeds=result.total_seeds,
+        created_documents=result.created_documents,
+        already_present_documents=result.already_present_documents,
+        completed_jobs=result.completed_jobs,
+        rejected_jobs=result.rejected_jobs,
+        chat_ready_documents=result.chat_ready_documents,
+        pending_review_documents=result.pending_review_documents,
+        document_ids=list(result.document_ids),
+        rejected_source_urls=list(result.rejected_source_urls),
     )
 
 
@@ -138,6 +175,21 @@ def _legal_chunk_to_response(chunk: LegalChunkRecord) -> LegalChunkResponse:
     )
 
 
+def _ingestion_job_to_response(job: IngestionJobRecord) -> IngestionJobDetailResponse:
+    return IngestionJobDetailResponse(
+        id=job.id,
+        source=job.source,
+        source_url=job.source_url,
+        requested_by=job.requested_by,
+        mode=job.mode,
+        status=job.status,
+        error_message=job.error_message,
+        document_id=job.document_id,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
+
+
 def _answer_audit_to_summary_response(audit: AnswerAuditRecord) -> AnswerAuditSummaryResponse:
     return AnswerAuditSummaryResponse(
         id=audit.id,
@@ -150,6 +202,18 @@ def _answer_audit_to_summary_response(audit: AnswerAuditRecord) -> AnswerAuditSu
         latency_ms=audit.latency_ms,
         estimated_cost_usd=audit.estimated_cost_usd,
         created_at=audit.created_at,
+    )
+
+
+def _answer_feedback_to_response(feedback: AnswerFeedbackRecord) -> AnswerFeedbackResponse:
+    return AnswerFeedbackResponse(
+        id=feedback.id,
+        audit_id=feedback.audit_id,
+        rating=feedback.rating,
+        comment=feedback.comment,
+        user_id=feedback.user_id,
+        session_id=feedback.session_id,
+        created_at=feedback.created_at,
     )
 
 
@@ -180,6 +244,53 @@ def check_source_policy_url(
     source_policy: SourcePolicy = Depends(get_source_policy),
 ) -> SourcePolicyCheckResult:
     return source_policy.check_url(payload.url)
+
+
+@router.get("/admin/diagnostics", response_model=AdminDiagnosticsResponse, dependencies=admin_dependencies)
+def get_admin_diagnostics(
+    source_policy: SourcePolicy = Depends(get_source_policy),
+    repository: LegalRepository = Depends(get_repository),
+) -> AdminDiagnosticsResponse:
+    return AdminDiagnosticsResponse(
+        status="ok",
+        database_backend=repository.backend,
+        source_policy_name=source_policy.name,
+        source_policy_version=source_policy.version,
+        documents_total=repository.count_documents(),
+        chat_ready_documents=repository.count_documents(status=DocumentStatus.CHAT_READY.value),
+        pending_review_documents=repository.count_documents(status=DocumentStatus.PENDING_REVIEW.value),
+        archived_documents=repository.count_documents(status=DocumentStatus.ARCHIVED.value),
+        rejected_documents=repository.count_documents(status=DocumentStatus.REJECTED.value),
+        ingestion_jobs_total=repository.count_jobs(),
+        ingestion_jobs_completed=repository.count_jobs(status=IngestionJobStatus.COMPLETED.value),
+        ingestion_jobs_rejected=repository.count_jobs(status=IngestionJobStatus.REJECTED.value),
+        ingestion_jobs_pending=repository.count_jobs(status=IngestionJobStatus.PENDING.value),
+        answer_audits_total=repository.count_answer_audits(),
+        answer_feedback_total=repository.count_answer_feedback(),
+        evaluation_runs_total=repository.count_evaluation_runs(),
+    )
+
+
+@router.get("/admin/metrics", response_model=AdminMetricsResponse, dependencies=admin_dependencies)
+def get_admin_metrics(repository: LegalRepository = Depends(get_repository)) -> AdminMetricsResponse:
+    return AdminMetricsResponse(
+        documents={
+            "total": repository.count_documents(),
+            "chat_ready": repository.count_documents(status=DocumentStatus.CHAT_READY.value),
+            "pending_review": repository.count_documents(status=DocumentStatus.PENDING_REVIEW.value),
+            "archived": repository.count_documents(status=DocumentStatus.ARCHIVED.value),
+            "rejected": repository.count_documents(status=DocumentStatus.REJECTED.value),
+        },
+        ingestion_jobs={
+            "total": repository.count_jobs(),
+            "completed": repository.count_jobs(status=IngestionJobStatus.COMPLETED.value),
+            "rejected": repository.count_jobs(status=IngestionJobStatus.REJECTED.value),
+            "pending": repository.count_jobs(status=IngestionJobStatus.PENDING.value),
+        },
+        answer_audits={"total": repository.count_answer_audits()},
+        answer_feedback={"total": repository.count_answer_feedback()},
+        evaluation_runs={"total": repository.count_evaluation_runs()},
+    )
 
 
 @router.post("/query/classify", response_model=ClassifyQueryResponse)
@@ -228,6 +339,28 @@ def answer_legal_chat(
     repository: LegalRepository = Depends(get_repository),
 ) -> ChatAnswerResponse:
     return answer_chat(payload, source_policy, repository)
+
+
+@router.post("/feedback/answer", response_model=AnswerFeedbackResponse, status_code=status.HTTP_201_CREATED)
+def create_answer_feedback(
+    payload: AnswerFeedbackRequest,
+    repository: LegalRepository = Depends(get_repository),
+) -> AnswerFeedbackResponse:
+    audit = repository.get_answer_audit(payload.audit_id)
+    if audit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Answer audit not found.")
+    feedback = repository.create_answer_feedback(
+        AnswerFeedbackRecord(
+            id=str(uuid4()),
+            audit_id=payload.audit_id,
+            rating=payload.rating.value,
+            comment=payload.comment,
+            user_id=payload.user_id,
+            session_id=payload.session_id,
+            created_at=utc_now_iso(),
+        )
+    )
+    return _answer_feedback_to_response(feedback)
 
 
 @router.get("/admin/documents", response_model=LegalDocumentListResponse, dependencies=admin_dependencies)
@@ -299,9 +432,17 @@ def list_legal_document_chunks(
 def update_legal_document_status(
     document_id: str,
     payload: AdminDocumentStatusRequest,
+    source_policy: SourcePolicy = Depends(get_source_policy),
     repository: LegalRepository = Depends(get_repository),
 ) -> AdminDocumentStatusResponse:
-    document = repository.promote_document(document_id, payload.target_status.value)
+    response = promote_document(
+        PromoteDocumentRequest(document_id=document_id, target_status=payload.target_status.value),
+        repository,
+        source_policy,
+    )
+    if response is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    document = repository.get_document(document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
     return AdminDocumentStatusResponse(document=_legal_document_to_response(document))
@@ -346,6 +487,76 @@ def get_answer_audit(
     return answer_audit_to_response(audit)
 
 
+@router.get("/admin/feedback", response_model=AnswerFeedbackListResponse, dependencies=admin_dependencies)
+def list_answer_feedback(
+    audit_id: str | None = None,
+    rating: AnswerFeedbackRating | None = None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    repository: LegalRepository = Depends(get_repository),
+) -> AnswerFeedbackListResponse:
+    rating_value = rating.value if rating is not None else None
+    feedback = repository.list_answer_feedback(
+        audit_id=audit_id,
+        rating=rating_value,
+        session_id=session_id,
+        user_id=user_id,
+        limit=limit,
+        offset=offset,
+    )
+    total = repository.count_answer_feedback(
+        audit_id=audit_id,
+        rating=rating_value,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    return AnswerFeedbackListResponse(
+        feedback=[_answer_feedback_to_response(item) for item in feedback],
+        total=total,
+    )
+
+
+@router.get("/admin/ingestion/jobs", response_model=IngestionJobListResponse, dependencies=admin_dependencies)
+def list_ingestion_jobs(
+    job_status: IngestionJobStatus | None = Query(default=None, alias="status"),
+    mode: str | None = None,
+    source: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    repository: LegalRepository = Depends(get_repository),
+) -> IngestionJobListResponse:
+    status_value = job_status.value if job_status is not None else None
+    jobs = repository.list_jobs(
+        status=status_value,
+        mode=mode,
+        source=source,
+        limit=limit,
+        offset=offset,
+    )
+    total = repository.count_jobs(status=status_value, mode=mode, source=source)
+    return IngestionJobListResponse(
+        jobs=[_ingestion_job_to_response(job) for job in jobs],
+        total=total,
+    )
+
+
+@router.get(
+    "/admin/ingestion/jobs/{job_id}",
+    response_model=IngestionJobDetailResponse,
+    dependencies=admin_dependencies,
+)
+def get_ingestion_job(
+    job_id: str,
+    repository: LegalRepository = Depends(get_repository),
+) -> IngestionJobDetailResponse:
+    job = repository.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingestion job not found.")
+    return _ingestion_job_to_response(job)
+
+
 @router.post("/admin/evaluation/run", response_model=EvaluationRunResponse, dependencies=admin_dependencies)
 def run_legal_evaluation(
     payload: EvaluationRunRequest,
@@ -372,6 +583,19 @@ def list_legal_evaluation_runs(
         runs=[_evaluation_run_to_summary_response(run) for run in runs],
         total=total,
     )
+
+
+@router.post(
+    "/admin/corpus/seed",
+    response_model=InitialCorpusSeedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=admin_dependencies,
+)
+def seed_legal_initial_corpus(
+    source_policy: SourcePolicy = Depends(get_source_policy),
+    repository: LegalRepository = Depends(get_repository),
+) -> InitialCorpusSeedResponse:
+    return _initial_corpus_seed_to_response(seed_initial_corpus(repository, source_policy))
 
 
 @router.get("/admin/evaluation/runs/{run_id}", response_model=EvaluationRunResponse, dependencies=admin_dependencies)
@@ -406,9 +630,10 @@ def crawl_legal_url(
 @router.post("/ingestion/promote", response_model=PromoteDocumentResponse)
 def promote_legal_document(
     payload: PromoteDocumentRequest,
+    source_policy: SourcePolicy = Depends(get_source_policy),
     repository: LegalRepository = Depends(get_repository),
 ) -> PromoteDocumentResponse:
-    response = promote_document(payload, repository)
+    response = promote_document(payload, repository, source_policy)
     if response is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
     return response

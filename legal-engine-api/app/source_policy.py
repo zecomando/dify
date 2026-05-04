@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -187,6 +188,38 @@ def find_matching_domain(domain: str, policy_domains: Sequence[str]) -> str | No
     return None
 
 
+def validate_source_requirements(
+    authority: SourcePolicyAuthority,
+    *,
+    document_type: str | None,
+    source_url: str,
+    raw_text: str = "",
+    legal_metadata: dict[str, str] | None = None,
+) -> list[str]:
+    violations: list[str] = []
+    normalized_metadata = _normalize_metadata(legal_metadata or {})
+    if document_type is not None and document_type not in authority.allowed_document_types:
+        violations.append(f"Document type {document_type} is not allowed for {authority.source}.")
+
+    missing_metadata = [
+        required_field
+        for required_field in authority.required_metadata
+        if not _has_required_metadata(required_field, normalized_metadata, source_url)
+    ]
+    if missing_metadata:
+        violations.append(f"Missing required metadata for {authority.source}: {', '.join(missing_metadata)}.")
+
+    if authority.required_identifiers_any and not any(
+        _has_required_identifier(identifier, normalized_metadata, source_url, raw_text)
+        for identifier in authority.required_identifiers_any
+    ):
+        violations.append(
+            f"Missing at least one required identifier for {authority.source}: "
+            f"{', '.join(authority.required_identifiers_any)}."
+        )
+    return violations
+
+
 def _load_authorities(value: object) -> tuple[AuthorityRule, ...]:
     jurisdictions = _as_mapping(value)
     rules: list[AuthorityRule] = []
@@ -210,6 +243,32 @@ def _load_authorities(value: object) -> tuple[AuthorityRule, ...]:
                 )
             )
     return tuple(rule for rule in rules if rule.domain)
+
+
+def _normalize_metadata(legal_metadata: dict[str, str]) -> dict[str, str]:
+    return {
+        key.strip().lower(): value.strip() for key, value in legal_metadata.items() if key.strip() and value.strip()
+    }
+
+
+def _has_required_metadata(required_field: str, legal_metadata: dict[str, str], source_url: str) -> bool:
+    normalized_field = required_field.lower()
+    if normalized_field == "source_url" and source_url.strip():
+        return True
+    return bool(legal_metadata.get(normalized_field))
+
+
+def _has_required_identifier(
+    required_identifier: str,
+    legal_metadata: dict[str, str],
+    source_url: str,
+    raw_text: str,
+) -> bool:
+    normalized_identifier = required_identifier.lower()
+    if legal_metadata.get(normalized_identifier):
+        return True
+    haystack = f"{source_url}\n{raw_text}\n{' '.join(legal_metadata.values())}".lower()
+    return bool(re.search(rf"(?:^|[^a-z0-9]){re.escape(normalized_identifier)}(?::|=|/)", haystack))
 
 
 def _load_domain_list(value: object) -> tuple[str, ...]:

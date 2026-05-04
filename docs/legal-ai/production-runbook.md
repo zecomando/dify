@@ -28,11 +28,11 @@ Definir procedimentos operacionais para manter o serviço disponível, seguro, a
 
 - Executar testes unitários.
 - Executar evaluation suite mínima.
-- Confirmar migrations.
+- Confirmar migrations com `legal-db-migrate`.
 - Confirmar source policy.
 - Confirmar `.env` de ambiente.
 - Confirmar `LEGAL_ENGINE_ADMIN_TOKEN` definido e guardado como secret do ambiente.
-- Confirmar backups recentes.
+- Confirmar backups recentes com `legal-db-backup` ou snapshot gerido.
 
 ### Execução de deploy
 
@@ -62,42 +62,126 @@ Definir procedimentos operacionais para manter o serviço disponível, seguro, a
 ## Staging mínimo
 
 1. Definir `LEGAL_ENGINE_ADMIN_TOKEN` fora do repositório.
-2. Subir `legal-engine-api` com volume persistente para SQLite.
+2. Subir `legal-engine-api` com volume persistente para SQLite ou `LEGAL_ENGINE_DATABASE_URL` para PostgreSQL.
 3. Confirmar `GET /health`.
-4. Ingerir uma fonte oficial mínima.
+4. Semear o corpus inicial com `legal-seed` ou `POST /admin/corpus/seed`.
 5. Confirmar `/admin/documents` com `X-Admin-Token`.
-6. Importar `docs/legal-ai/dify-chat-answer.yml` no Dify.
-7. Executar os smoke tests do chat no Dify.
+6. Executar `legal-demo` antes de abrir o Dify.
+7. Importar `docs/legal-ai/dify-chat-answer.yml` no Dify.
+8. Executar os smoke tests do chat no Dify.
 
-### Comandos de smoke
+## Staging smoke reproduzível
+
+### Objetivo
+
+Validar que um ambiente `local` ou `staging` consegue responder com fonte oficial, abster quando não há corpus suficiente, guardar auditoria e executar quality gates sem depender de estado manual oculto.
+
+### Variáveis obrigatórias
+
+- `LEGAL_ENGINE_ADMIN_TOKEN`: token secreto usado em todos os endpoints `/admin/*`.
+- `LEGAL_ENGINE_DATABASE_PATH`: caminho persistente para SQLite no MVP local/staging.
+- `LEGAL_ENGINE_DATABASE_URL`: URL PostgreSQL para staging/produção quando não se usa SQLite.
+- `LEGAL_SOURCE_POLICY_PATH`: opcional; usar apenas quando a source policy não estiver no caminho default.
+- `LEGAL_ENGINE_BASE_URL`: URL acessível pelo Dify e pelos comandos de smoke, por exemplo `http://127.0.0.1:8000`.
+
+### Ordem obrigatória
+
+1. Executar quality gates locais do pacote.
+2. Subir `legal-engine-api`.
+3. Confirmar health check.
+4. Semear corpus inicial.
+5. Executar `legal-demo` contra a mesma base persistente.
+6. Executar evaluation por API.
+7. Confirmar documentos `chat_ready`.
+8. Confirmar jobs de ingestão sem rejeições inesperadas.
+9. Importar `docs/legal-ai/dify-chat-answer.yml` no Dify.
+10. Configurar o HTTP node para `POST $LEGAL_ENGINE_BASE_URL/chat/answer`.
+11. Executar três perguntas Dify: respondível, europeia respondível e sem corpus suficiente.
+12. Registar `audit_id`, `evaluation_run_id`, total de documentos e total de jobs.
+
+### Comandos de smoke local/staging
 
 ```bash
-curl http://127.0.0.1:8000/health
+uv run --project legal-engine-api pytest
+uv run --project legal-engine-api ruff check app tests
+uv run --project legal-engine-api ruff format --check app tests
+uv run --project legal-engine-api legal-eval
+uv run --project legal-engine-api legal-db-migrate
 
-curl -X POST http://127.0.0.1:8000/ingestion/source \
-  -H "Content-Type: application/json" \
-  -d '{"source_url":"https://dre.pt/dre/legislacao-consolidada/codigo-civil","raw_text":"Artigo 1.º\nA responsabilidade civil depende dos pressupostos legais.","promote_if_valid":true}'
+uv run --project legal-engine-api legal-seed --json
 
-curl -X POST http://127.0.0.1:8000/chat/answer \
+uv run --project legal-engine-api legal-demo
+
+curl "$LEGAL_ENGINE_BASE_URL/health"
+
+curl -X POST "$LEGAL_ENGINE_BASE_URL/admin/corpus/seed" \
+  -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN"
+
+curl -X POST "$LEGAL_ENGINE_BASE_URL/chat/answer" \
   -H "Content-Type: application/json" \
-  -d '{"question":"responsabilidade civil"}'
+  -d '{"question":"Quais são os pressupostos da responsabilidade civil extracontratual?"}'
 
 curl -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
-  http://127.0.0.1:8000/admin/documents
+  "$LEGAL_ENGINE_BASE_URL/admin/documents"
 
-curl -X POST http://127.0.0.1:8000/admin/evaluation/run \
+curl -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
+  "$LEGAL_ENGINE_BASE_URL/admin/ingestion/jobs"
+
+curl -X POST "$LEGAL_ENGINE_BASE_URL/admin/evaluation/run" \
   -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{}"
 ```
 
+### Perguntas canónicas para Dify
+
+Pergunta respondível:
+
+```text
+Quais são os pressupostos da responsabilidade civil extracontratual?
+```
+
+Pergunta europeia respondível:
+
+```text
+No RGPD da União Europeia, quais são as bases de licitude para tratamento de dados pessoais?
+```
+
+Pergunta que deve abster:
+
+```text
+Qual é a orientação dominante sobre uma questão jurídica local sem corpus indexado?
+```
+
+### Critérios de aprovação
+
+- `GET /health` retorna sucesso.
+- `legal-demo` termina com `PASS`.
+- `legal-eval` termina com `passed=True`.
+- `POST /admin/evaluation/run` retorna um run com `passed=true`.
+- `/admin/documents` mostra documentos `chat_ready`.
+- `/admin/ingestion/jobs` não mostra rejeições inesperadas no seed.
+- Cada resposta Dify mostra resposta final ou abstenção, nunca draft inválido.
+- Cada resposta Dify expõe ou permite rastrear `audit_id`.
+- A pergunta sem corpus suficiente abstém.
+
 ## Backups
 
 ### PostgreSQL
 
-- Backup diário.
+- Definir `LEGAL_ENGINE_DATABASE_URL` como secret do ambiente.
+- Executar `legal-db-migrate` antes de semear ou abrir tráfego.
+- Criar backup manual com `legal-db-backup --output /backups/legal-engine.dump` antes de deploys de risco.
+- Restaurar com `legal-db-restore --input /backups/legal-engine.dump`.
+- Backup diário via `pg_dump` ou snapshots geridos.
 - Retenção mínima de 30 dias.
 - Teste de restore mensal.
+
+### SQLite local/staging
+
+- Usar `LEGAL_ENGINE_DATABASE_PATH` em volume persistente.
+- Criar backup com `legal-db-backup --output /backups/legal-engine.sqlite3`.
+- Restaurar com `legal-db-restore --input /backups/legal-engine.sqlite3 --overwrite`.
 
 ### Object storage
 

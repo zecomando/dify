@@ -6,12 +6,18 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115.0,<1.0.0",
     "pydantic>=2.10.0,<3.0.0",
+    "psycopg[binary]>=3.2.0,<4.0.0",
     "pyyaml>=6.0.2,<7.0.0",
     "uvicorn[standard]>=0.34.0,<1.0.0",
 ]
 
 [project.scripts]
+legal-demo = "app.demo:main"
+legal-db-backup = "app.database_ops:backup_main"
+legal-db-migrate = "app.database_ops:migrate_main"
+legal-db-restore = "app.database_ops:restore_main"
 legal-eval = "app.evaluate:main"
+legal-seed = "app.seed:main"
 
 [build-system]
 requires = ["hatchling"]

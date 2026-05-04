@@ -5,12 +5,13 @@ FastAPI service for the Legal AI Chat evidence engine. The service is determinis
 ## Scope
 
 - Load the versioned source policy from `docs/legal-ai/source-policy.yml`.
-- Ingest official legal text into SQLite.
+- Ingest official legal text into SQLite from manual text or initial remote crawl support for DRE/EUR-Lex.
 - Chunk legal text deterministically.
+- Persist legal metadata and enforce required source-policy metadata/identifiers before `chat_ready`.
 - Retrieve and rerank persisted `chat_ready` chunks.
 - Build evidence only from authoritative official sources.
 - Generate cited deterministic answers.
-- Validate answers with anti-hallucination guardrails.
+- Validate answers with anti-hallucination guardrails for URLs, articles, processes, ECLI, and CELEX.
 - Persist answer audits and evaluation runs.
 
 ## Local commands
@@ -20,6 +21,8 @@ uv sync --project legal-engine-api --group dev
 uv run --project legal-engine-api pytest
 uv run --project legal-engine-api ruff check app tests
 uv run --project legal-engine-api ruff format --check app tests
+uv run --project legal-engine-api legal-seed
+uv run --project legal-engine-api legal-demo
 uv run --project legal-engine-api uvicorn app.main:app --reload
 ```
 
@@ -27,9 +30,41 @@ uv run --project legal-engine-api uvicorn app.main:app --reload
 
 Set `LEGAL_ENGINE_DATABASE_PATH` to override the default SQLite path.
 
+Set `LEGAL_ENGINE_DATABASE_URL` to use PostgreSQL instead of SQLite. SQLite remains the default for local development.
+
 Set `LEGAL_SOURCE_POLICY_PATH` to override the default policy path.
 
 Set `LEGAL_ENGINE_ADMIN_TOKEN` to protect all `/admin/*` endpoints with `X-Admin-Token`.
+
+## Database operations
+
+Initialize or update the configured database schema:
+
+```bash
+uv run --project legal-engine-api legal-db-migrate
+uv run --project legal-engine-api legal-db-migrate --database-url "$LEGAL_ENGINE_DATABASE_URL"
+```
+
+Create and restore backups:
+
+```bash
+uv run --project legal-engine-api legal-db-backup --output .data/legal_engine.backup.sqlite3
+uv run --project legal-engine-api legal-db-restore --input .data/legal_engine.backup.sqlite3 --overwrite
+```
+
+When `LEGAL_ENGINE_DATABASE_URL` or `--database-url` is set, backup and restore use `pg_dump` and `pg_restore`.
+
+## Local MVP status
+
+The local MVP path is deterministic and runs without external LLM, embedding, rerank, or vector database providers. Local hash embeddings are persisted in SQLite and combined with lexical retrieval for hybrid search. Documents are only promoted to `chat_ready` when they have persisted chunks and satisfy the configured source-policy requirements for document type, required metadata, and required legal identifiers. Manual and admin promotion use the same safe promotion rules.
+
+Validated locally with:
+
+```bash
+uv run pytest
+uv run ruff check app tests
+uv run legal-demo
+```
 
 ## API smoke checks
 
@@ -38,11 +73,18 @@ curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/openapi.json
 ```
 
+## Remote crawl MVP
+
+`POST /ingestion/crawl-url` validates the URL against `source-policy.yml`. For supported official DRE and EUR-Lex URLs, it fetches remote HTML/text, normalizes it into raw text, extracts basic legal metadata such as CELEX, persists raw text/chunks/jobs, and promotes to `chat_ready` only when source-policy requirements pass.
+
+Tests use an injected fake fetcher and do not call live official websites.
+
 ## Main endpoints
 
 - `GET /health`
 - `POST /source-policy/check-url`
 - `POST /ingestion/source`
+- `POST /ingestion/crawl-url`
 - `POST /retrieval/search`
 - `POST /chat/answer`
 - `GET /admin/documents`
@@ -51,9 +93,41 @@ curl http://127.0.0.1:8000/openapi.json
 - `POST /admin/documents/{document_id}/status`
 - `GET /admin/audits`
 - `GET /admin/audit/{answer_id}`
+- `POST /admin/corpus/seed`
+- `GET /admin/ingestion/jobs`
+- `GET /admin/ingestion/jobs/{job_id}`
 - `POST /admin/evaluation/run`
 - `GET /admin/evaluation/runs`
 - `GET /admin/evaluation/runs/{run_id}`
+
+## Initial deterministic corpus
+
+Seed the local SQLite database with the deterministic demo corpus:
+
+```bash
+uv run --project legal-engine-api legal-seed
+uv run --project legal-engine-api legal-seed --json
+```
+
+Or through the protected admin API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/admin/corpus/seed \
+  -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN"
+```
+
+The seed operation is idempotent by `source_url`. The initial corpus covers DRE legislation, EUR-Lex legislation/treaty material, selected official case-law metadata, TED, and BASE examples. All seeded documents must satisfy `source-policy.yml` before becoming `chat_ready`.
+
+## Local demo smoke
+
+Run the deterministic seed-to-chat smoke without starting FastAPI or Dify:
+
+```bash
+uv run --project legal-engine-api legal-demo
+uv run --project legal-engine-api legal-demo --json
+```
+
+The command seeds the initial corpus, runs representative answerable and no-source questions through the real chat pipeline, prints verdicts, evidence counts, sources, and audit IDs, and exits with a non-zero status if an expected demo case fails.
 
 ## Evaluation quality gates
 
@@ -94,13 +168,12 @@ The compose file mounts `../docs/legal-ai` read-only, stores SQLite data in the 
 ## Initial ingestion smoke
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ingestion/source \
-  -H "Content-Type: application/json" \
-  -d '{"source_url":"https://dre.pt/dre/legislacao-consolidada/codigo-civil","raw_text":"Artigo 1.º\nA responsabilidade civil depende dos pressupostos legais.","promote_if_valid":true}'
+curl -X POST http://127.0.0.1:8000/admin/corpus/seed \
+  -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN"
 
 curl -X POST http://127.0.0.1:8000/chat/answer \
   -H "Content-Type: application/json" \
-  -d '{"question":"responsabilidade civil"}'
+  -d '{"question":"Quais são os pressupostos da responsabilidade civil extracontratual?"}'
 
 curl -H "X-Admin-Token: $LEGAL_ENGINE_ADMIN_TOKEN" \
   http://127.0.0.1:8000/admin/documents

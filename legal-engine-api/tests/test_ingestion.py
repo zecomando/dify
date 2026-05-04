@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import get_repository
 from app.ingestion import crawl_url, ingest_source, promote_document, reindex_corpus
+from app.remote_sources import RemoteFetchError, RemoteFetchResult
 from app.main import app
 from app.repository import LegalRepository
 from app.schemas import (
@@ -25,6 +26,31 @@ def _source_policy() -> SourcePolicy:
 
 def _repository(tmp_path: Path) -> LegalRepository:
     return LegalRepository(tmp_path / "legal-engine.sqlite3")
+
+
+class FakeRemoteFetcher:
+    def __init__(self, text: str | None = None, error: Exception | None = None) -> None:
+        self.text = text
+        self.error = error
+
+    def fetch(self, url: str) -> RemoteFetchResult:
+        if self.error is not None:
+            raise self.error
+        assert self.text is not None
+        return RemoteFetchResult(final_url=url, status_code=200, content_type="text/html", text=self.text)
+
+
+class FlakyRemoteFetcher:
+    def __init__(self, *, failures_before_success: int, text: str) -> None:
+        self.failures_before_success = failures_before_success
+        self.text = text
+        self.calls = 0
+
+    def fetch(self, url: str) -> RemoteFetchResult:
+        self.calls += 1
+        if self.calls <= self.failures_before_success:
+            raise RemoteFetchError("Temporary remote fetch failure.")
+        return RemoteFetchResult(final_url=url, status_code=200, content_type="text/html", text=self.text)
 
 
 def test_ingest_source_creates_completed_job_and_pending_review_document(tmp_path: Path):
@@ -58,6 +84,7 @@ def test_ingest_source_promotes_valid_document_when_requested(tmp_path: Path):
     response = ingest_source(
         IngestionSourceRequest(
             source_url="https://dre.pt/dre/legislacao-consolidada/codigo-do-trabalho",
+            raw_text="Artigo 1.º\nTexto laboral.",
             promote_if_valid=True,
         ),
         _source_policy(),
@@ -88,6 +115,124 @@ def test_ingest_source_rejects_non_authoritative_source_without_document(tmp_pat
     assert job.error_message is not None
 
 
+def test_ingest_source_rejects_disallowed_document_type_for_authority(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            document_type="case_law",
+            raw_text="Artigo 1.º\nTexto oficial.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.REJECTED
+    assert job is not None
+    assert job.document_id is None
+    assert job.error_message == "Document type case_law is not allowed for DRE."
+
+
+def test_ingest_source_keeps_eurlex_without_required_identifier_pending_review(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://eur-lex.europa.eu/legal-content/PT/TXT/",
+            document_type="legislation",
+            raw_text="Artigo 1.º\nTexto europeu sem identificador.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "pending_review"
+
+
+def test_ingest_source_promotes_eurlex_with_required_identifier(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX:32016R0679",
+            document_type="legislation",
+            raw_text="Artigo 1.º\nTexto europeu com identificador CELEX:32016R0679.",
+            legal_metadata={"CELEX": "32016R0679"},
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "chat_ready"
+    assert document.legal_metadata == {"celex": "32016R0679"}
+
+
+def test_ingest_source_keeps_case_law_without_required_metadata_pending_review(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://www.dgsi.pt/jstj.nsf/example",
+            document_type="case_law",
+            raw_text="Acórdão sobre responsabilidade civil.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "pending_review"
+
+
+def test_ingest_source_promotes_case_law_with_required_metadata(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://www.dgsi.pt/jstj.nsf/example",
+            document_type="case_law",
+            raw_text="Acórdão sobre responsabilidade civil no processo 123/20.0T8LSB.",
+            legal_metadata={
+                "court": "STJ",
+                "decision_date": "2024-01-01",
+                "process_number": "123/20.0T8LSB",
+            },
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "chat_ready"
+    assert document.legal_metadata["court"] == "STJ"
+
+
 def test_crawl_url_rejects_blocked_url_but_keeps_discovery_url_pending(tmp_path: Path):
     repository = _repository(tmp_path)
 
@@ -106,10 +251,152 @@ def test_crawl_url_rejects_blocked_url_but_keeps_discovery_url_pending(tmp_path:
     assert discovery_response.status == IngestionJobStatus.PENDING
 
 
+def test_crawl_url_fetches_and_ingests_dre_source(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Código Civil</h1>
+            <h2>Artigo 1.º</h2>
+            <p>A responsabilidade civil depende de facto, ilicitude, culpa, dano e nexo causal.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.mode == "crawl"
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "DRE"
+    assert document.status == "chat_ready"
+    assert document.document_type == "legislation"
+    assert document.area == ("civil",)
+    assert document.legal_value_warning
+    assert "responsabilidade civil" in (repository.get_document_raw_text(document.id) or "")
+    chunks = repository.list_chunks_by_document(document.id)
+    assert any(chunk.citation_label == "Artigo 1.º" for chunk in chunks)
+
+
+def test_crawl_url_extracts_dre_eli_metadata(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://diariodarepublica.pt/dr/detalhe/decreto-lei/47344-1966"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Decreto-Lei n.º 47344</h1>
+            <p>ELI: https://data.dre.pt/eli/dec-lei/47344/1966/11/25/p/dre/pt/html</p>
+            <h2>Artigo 1.º</h2>
+            <p>Texto oficial.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["eli"] == "https://data.dre.pt/eli/dec-lei/47344/1966/11/25/p/dre/pt/html"
+    assert document.legal_metadata["diploma"] == "Decreto-Lei n.º 47344"
+
+
+def test_crawl_url_retries_transient_remote_fetch_errors(tmp_path: Path):
+    repository = _repository(tmp_path)
+    fetcher = FlakyRemoteFetcher(
+        failures_before_success=1,
+        text="""
+        <html><body>
+        <h1>Código Civil</h1>
+        <h2>Artigo 1.º</h2>
+        <p>A responsabilidade civil depende dos pressupostos legais.</p>
+        </body></html>
+        """,
+    )
+
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil", fetch_attempts=2),
+        _source_policy(),
+        repository,
+        fetcher,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert fetcher.calls == 2
+    assert job is not None
+    assert job.error_message is None
+
+
+def test_crawl_url_fetches_and_ingests_eurlex_source_with_celex(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX:32016R0679"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Regulamento Geral sobre a Proteção de Dados</h1>
+            <h2>Artigo 6.º</h2>
+            <p>O RGPD, CELEX:32016R0679, define bases de licitude para dados pessoais.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.mode == "crawl"
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "EURLEX"
+    assert document.jurisdiction == "europa"
+    assert document.status == "chat_ready"
+    assert document.document_type == "legislation"
+    assert document.area == ("proteccao_dados",)
+    assert document.legal_metadata == {"celex": "32016R0679"}
+    chunks = repository.list_chunks_by_document(document.id)
+    assert any(chunk.citation_label == "Artigo 6.º" for chunk in chunks)
+
+
+def test_crawl_url_rejects_when_remote_fetch_fails(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(error=RemoteFetchError("Remote fetch failed.")),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.REJECTED
+    assert job is not None
+    assert job.mode == "crawl"
+    assert job.document_id is None
+    assert job.error_message == "Remote fetch failed."
+
+
 def test_promote_document_updates_existing_document_status(tmp_path: Path):
     repository = _repository(tmp_path)
     response = ingest_source(
-        IngestionSourceRequest(source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nTexto do artigo.",
+        ),
         _source_policy(),
         repository,
     )
@@ -124,16 +411,110 @@ def test_promote_document_updates_existing_document_status(tmp_path: Path):
     assert promoted.status == "chat_ready"
 
 
-def test_reindex_corpus_creates_pending_job(tmp_path: Path):
+def test_promote_document_keeps_empty_document_pending_review(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = ingest_source(
+        IngestionSourceRequest(source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        _source_policy(),
+        repository,
+    )
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+
+    promoted = promote_document(PromoteDocumentRequest(document_id=job.document_id), repository)
+
+    assert promoted is not None
+    assert promoted.document_id == job.document_id
+    assert promoted.status == "pending_review"
+
+
+def test_promote_document_with_policy_keeps_missing_required_metadata_pending_review(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://www.dgsi.pt/jstj.nsf/example",
+            document_type="case_law",
+            raw_text="Acórdão sobre responsabilidade civil.",
+        ),
+        _source_policy(),
+        repository,
+    )
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+
+    promoted = promote_document(PromoteDocumentRequest(document_id=job.document_id), repository, _source_policy())
+
+    assert promoted is not None
+    assert promoted.document_id == job.document_id
+    assert promoted.status == "pending_review"
+
+
+def test_promote_document_with_policy_updates_when_required_metadata_exists(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://www.dgsi.pt/jstj.nsf/example",
+            document_type="case_law",
+            raw_text="Acórdão sobre responsabilidade civil.",
+            legal_metadata={
+                "court": "STJ",
+                "decision_date": "2024-01-01",
+                "process_number": "123/20.0T8LSB",
+            },
+        ),
+        _source_policy(),
+        repository,
+    )
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+
+    promoted = promote_document(PromoteDocumentRequest(document_id=job.document_id), repository, _source_policy())
+
+    assert promoted is not None
+    assert promoted.document_id == job.document_id
+    assert promoted.status == "chat_ready"
+
+
+def test_reindex_corpus_rejects_when_no_documents_match(tmp_path: Path):
     repository = _repository(tmp_path)
 
     response = reindex_corpus(ReindexRequest(source="DRE", force=True), repository)
 
     job = repository.get_job(response.job_id)
-    assert response.status == IngestionJobStatus.PENDING
+    assert response.status == IngestionJobStatus.REJECTED
     assert job is not None
     assert job.mode == "reindex"
     assert job.source == "DRE"
+    assert job.error_message == "No documents matched the reindex request."
+
+
+def test_reindex_corpus_rebuilds_chunks_from_raw_text(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nTexto inicial.\n\nArtigo 2.º\nTexto adicional.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+
+    reindex_response = reindex_corpus(ReindexRequest(document_ids=[job.document_id], force=True), repository)
+
+    reindex_job = repository.get_job(reindex_response.job_id)
+    chunks = repository.list_chunks_by_document(job.document_id)
+    assert reindex_response.status == IngestionJobStatus.COMPLETED
+    assert reindex_job is not None
+    assert reindex_job.status == "completed"
+    assert len(chunks) == 2
+    assert [chunk.citation_label for chunk in chunks] == ["Artigo 1.º", "Artigo 2.º"]
 
 
 def test_ingest_source_persists_chunks_from_raw_text(tmp_path: Path):
@@ -151,7 +532,9 @@ def test_ingest_source_persists_chunks_from_raw_text(tmp_path: Path):
     assert job.document_id is not None
 
     chunks = repository.list_chunks_by_document(job.document_id)
+    raw_text = repository.get_document_raw_text(job.document_id)
     assert len(chunks) == 1
+    assert raw_text == "Artigo 1.º\nTexto do artigo."
     assert chunks[0].chunk_type == "article"
     assert chunks[0].citation_label == "Artigo 1.º"
     assert "Texto do artigo" in chunks[0].text_content

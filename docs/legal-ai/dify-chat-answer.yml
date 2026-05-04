@@ -22,9 +22,9 @@ workflow:
     speech_to_text:
       enabled: false
     suggested_questions:
-    - 'Quais são os fundamentos de exclusão de propostas no CCP?'
-    - 'Explica o artigo 999.º do Código dos Contratos Públicos.'
-    - 'Há fonte oficial suficiente para responder a esta pergunta?'
+    - 'Quais são os pressupostos da responsabilidade civil extracontratual?'
+    - 'No RGPD da União Europeia, quais são as bases de licitude para tratamento de dados pessoais?'
+    - 'Qual é a interpretação definitiva dos tribunais sobre uma questão que ainda não foi indexada?'
     suggested_questions_after_answer:
       enabled: true
     text_to_speech:

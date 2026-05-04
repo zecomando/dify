@@ -1,0 +1,234 @@
+{
+  "name": "Legal AI - Manual URL Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "legal-ai/manual-url-ingestion",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "manual-url-webhook",
+      "name": "Manual URL Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "legal-ai-manual-url-ingestion"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst url = body.url || body.source_url;\nif (!url) {\n  throw new Error('Missing url/source_url in webhook payload.');\n}\nreturn [{ json: { url, requested_by: body.requested_by || 'n8n', promote_if_valid: body.promote_if_valid === true } }];"
+      },
+      "id": "normalize-request",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/source-policy/check-url' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.url }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "check-source-policy",
+      "name": "Check Source Policy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json;\nif (result.status === 'blocked' || result.status === 'invalid_url') {\n  throw new Error(`Source rejected before crawl: ${result.reason}`);\n}\nreturn [{ json: { url: $('Normalize Request').first().json.url, policy_status: result.status, may_ground_answer: result.may_ground_answer, domain: result.domain } }];"
+      },
+      "id": "validate-policy-result",
+      "name": "Validate Policy Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/ingestion/crawl-url' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.url }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "crawl-url",
+      "name": "Crawl URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/ingestion/jobs/' + $json.job_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-ingestion-job",
+      "name": "Get Ingestion Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $json;\nif (!job.job_id && !job.id) {\n  throw new Error('Missing job identifier in ingestion response.');\n}\nif (job.status === 'rejected') {\n  throw new Error(`Ingestion rejected: ${job.error_message || 'no reason returned'}`);\n}\nreturn [{ json: { status: job.status, job_id: job.job_id || job.id, document_id: job.document_id || null, error_message: job.error_message || null } }];"
+      },
+      "id": "validate-ingestion-job",
+      "name": "Validate Ingestion Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Manual URL Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Check Source Policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Source Policy": {
+      "main": [
+        [
+          {
+            "node": "Validate Policy Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Policy Result": {
+      "main": [
+        [
+          {
+            "node": "Crawl URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl URL": {
+      "main": [
+        [
+          {
+            "node": "Get Ingestion Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Ingestion Job": {
+      "main": [
+        [
+          {
+            "node": "Validate Ingestion Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Ingestion Job": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "legal-ai"
+    },
+    {
+      "name": "ingestion"
+    }
+  ],
+  "versionId": "legal-ai-manual-url-ingestion-v1"
+}

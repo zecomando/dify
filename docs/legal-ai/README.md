@@ -54,8 +54,9 @@ A implementação local vive em `legal-engine-api/` e fornece:
 
 - **Pipeline orquestrado** em `POST /chat/answer`.
 - **Workflow Dify importável** em `dify-chat-answer.yml`.
-- **Admin mínimo protegido por `X-Admin-Token`** para documentos, chunks, auditorias e avaliações.
-- **Auditoria de respostas** em `GET /admin/audit/{answer_id}`.
+- **Admin mínimo protegido por `X-Admin-Token`** para documentos, chunks, jobs, auditorias, feedback e avaliações.
+- **Corpus inicial determinístico** via CLI `legal-seed` ou `POST /admin/corpus/seed`.
+- **Auditoria de respostas** em `GET /admin/audit/{answer_id}` e feedback por resposta em `POST /feedback/answer`.
 - **Quality gates determinísticos** via CLI `uv run --project legal-engine-api legal-eval`.
 - **Execução persistida de avaliações** em `POST /admin/evaluation/run`.
 - **Consulta histórica de avaliações** em `GET /admin/evaluation/runs/{run_id}`.
@@ -65,7 +66,7 @@ A implementação local vive em `legal-engine-api/` e fornece:
 1. Definir `LEGAL_ENGINE_ADMIN_TOKEN` com um valor secreto por ambiente.
 2. Subir `legal-engine-api` com `docker compose up --build` a partir de `legal-engine-api/`.
 3. Confirmar `GET /health`.
-4. Ingerir corpus inicial via `POST /ingestion/source` ou automação de crawl.
+4. Ingerir corpus inicial via `uv run --project legal-engine-api legal-seed` ou `POST /admin/corpus/seed`.
 5. Confirmar documentos em `/admin/documents` enviando `X-Admin-Token`.
 6. Importar `dify-chat-answer.yml` no Dify e validar o HTTP node para `/chat/answer`.
 7. Executar smoke Dify com pergunta respondível, pergunta-armadilha e pergunta sem corpus suficiente.

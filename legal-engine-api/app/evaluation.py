@@ -9,10 +9,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.ingestion import ingest_source
+from app.corpus import seed_initial_corpus
 from app.pipeline import answer_chat
 from app.repository import EvaluationRunRecord, LegalRepository, utc_now_iso
-from app.schemas import ChatAnswerRequest, IngestionSourceRequest, ValidatorVerdict
+from app.schemas import ChatAnswerRequest, ValidatorVerdict
 from app.source_policy import SourcePolicy
 
 JsonObject = dict[str, object]
@@ -91,12 +91,31 @@ class EvaluationRunResponse(BaseModel):
     created_at: str
 
 
-def run_evaluation(evals_dir: Path, source_policy_path: Path, database_path: Path | None = None) -> EvaluationRunResult:
+def run_evaluation(
+    evals_dir: Path,
+    source_policy_path: Path,
+    database_path: Path | None = None,
+    database_url: str | None = None,
+) -> EvaluationRunResult:
     source_policy = SourcePolicy.from_file(source_policy_path)
     if database_path is not None:
         return _run_evaluation_with_paths(
-            evals_dir, source_policy, database_path, database_path.with_suffix(".empty.sqlite3")
+            evals_dir,
+            source_policy,
+            database_path,
+            database_path.with_suffix(".empty.sqlite3"),
+            database_url=database_url,
         )
+
+    if database_url is not None:
+        with tempfile.TemporaryDirectory(prefix="legal-engine-eval-empty-") as temporary_directory:
+            return _run_evaluation_with_paths(
+                evals_dir,
+                source_policy,
+                Path(":memory:"),
+                Path(temporary_directory) / "empty.sqlite3",
+                database_url=database_url,
+            )
 
     with tempfile.TemporaryDirectory(prefix="legal-engine-eval-") as temporary_directory:
         temporary_path = Path(temporary_directory)
@@ -113,8 +132,9 @@ def _run_evaluation_with_paths(
     source_policy: SourcePolicy,
     seeded_database_path: Path,
     empty_database_path: Path,
+    database_url: str | None = None,
 ) -> EvaluationRunResult:
-    seeded_repository = LegalRepository(seeded_database_path)
+    seeded_repository = LegalRepository(seeded_database_path, database_url)
     empty_repository = LegalRepository(empty_database_path)
     seed_evaluation_corpus(seeded_repository, source_policy)
 
@@ -191,19 +211,7 @@ def evaluation_run_to_response(run: EvaluationRunRecord) -> EvaluationRunRespons
 
 
 def seed_evaluation_corpus(repository: LegalRepository, source_policy: SourcePolicy) -> None:
-    for seed in _evaluation_corpus_seeds():
-        ingest_source(
-            IngestionSourceRequest(
-                source_url=str(seed["source_url"]),
-                raw_text=str(seed["raw_text"]),
-                jurisdiction=str(seed["jurisdiction"]),
-                document_type=str(seed["document_type"]),
-                area=list(seed["area"]),
-                promote_if_valid=True,
-            ),
-            source_policy,
-            repository,
-        )
+    seed_initial_corpus(repository, source_policy)
 
 
 def _run_benchmark_case(
@@ -413,87 +421,6 @@ def _json_load_list(value: str) -> list[JsonObject]:
     if isinstance(loaded, list):
         return [item for item in loaded if isinstance(item, dict)]
     return []
-
-
-def _evaluation_corpus_seeds() -> tuple[JsonObject, ...]:
-    return (
-        _seed(
-            "https://dre.pt/dre/legislacao-consolidada/codigo-dos-contratos-publicos",
-            "contratacao_publica",
-            "legislation",
-            "Artigo 1.º\nO Código dos Contratos Públicos contém fundamentos de exclusão de propostas.\n\n"
-            "Artigo 2.º\nA exclusão por preço anormalmente baixo exige análise e pedido de esclarecimentos.",
-        ),
-        _seed(
-            "https://dre.pt/dre/legislacao-consolidada/codigo-do-procedimento-administrativo",
-            "administrativo",
-            "legislation",
-            "Artigo 1.º\nA audiência prévia é uma garantia no procedimento administrativo antes da decisão final.",
-        ),
-        _seed(
-            "https://dre.pt/dre/legislacao-consolidada/codigo-civil",
-            "civil",
-            "legislation",
-            "Artigo 1.º\nA responsabilidade civil extracontratual depende de facto, ilicitude, culpa, dano e nexo causal.",
-        ),
-        _seed(
-            "https://dre.pt/dre/legislacao-consolidada/codigo-do-trabalho",
-            "laboral",
-            "legislation",
-            "Artigo 1.º\nO despedimento por justa causa exige comportamento culposo que torne impossível a relação laboral.",
-        ),
-        _seed(
-            "https://dre.pt/dre/legislacao-consolidada/lei-geral-tributaria",
-            "fiscal",
-            "legislation",
-            "Artigo 1.º\nO prazo geral de caducidade do direito à liquidação tributária deve ser confirmado na LGT vigente.",
-        ),
-        _seed(
-            "https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX:32016R0679",
-            "proteccao_dados",
-            "legislation",
-            "Artigo 6.º\nO RGPD prevê bases de licitude para tratamento de dados pessoais.",
-            jurisdiction="europa",
-        ),
-        _seed(
-            "https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX:12012M",
-            "uniao_europeia",
-            "legislation",
-            "Artigo 1.º\nO princípio do primado do Direito da União Europeia resulta da ordem jurídica da União.",
-            jurisdiction="europa",
-        ),
-        _seed(
-            "https://hudoc.echr.coe.int/eng?i=001-article-6",
-            "cedh",
-            "legislation",
-            "Artigo 6.º\nA Convenção Europeia dos Direitos Humanos protege o direito a um processo equitativo.",
-            jurisdiction="europa",
-        ),
-        _seed(
-            "https://ted.europa.eu/pt/notice/example",
-            "contratacao_publica",
-            "procurement_notice",
-            "Artigo 1.º\nO TED contém anúncios de contratação pública europeus e metadados de procedimentos.",
-            jurisdiction="europa",
-        ),
-    )
-
-
-def _seed(
-    source_url: str,
-    area: str,
-    document_type: str,
-    raw_text: str,
-    *,
-    jurisdiction: str = "portugal",
-) -> JsonObject:
-    return {
-        "source_url": source_url,
-        "raw_text": raw_text,
-        "jurisdiction": jurisdiction,
-        "document_type": document_type,
-        "area": [area],
-    }
 
 
 def _jurisdiction_override(expected_domains: list[str]) -> list[str]:

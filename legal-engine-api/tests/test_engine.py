@@ -147,6 +147,55 @@ def test_validate_answer_fails_when_draft_mentions_unretrieved_url():
     assert result.hallucinated_identifiers == ["https://example.com/fonte-inventada"]
 
 
+def test_validate_answer_fails_when_draft_mentions_unretrieved_article():
+    evidence = EvidenceItem(
+        chunk_id="chunk-1",
+        citation_label="Artigo 1.º",
+        text="Artigo 1.º\nTexto oficial.",
+        source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+    )
+
+    result = validate_answer(
+        AnswerValidateRequest(
+            question="teste",
+            draft_answer="O Artigo 999.º permite essa conclusão. Artigo 1.º",
+            evidence=[evidence],
+        ),
+        _source_policy(),
+    )
+
+    assert result.verdict == ValidatorVerdict.FAIL
+    assert result.hallucinated_identifiers == ["Artigo 999.º"]
+
+
+def test_validate_answer_fails_when_draft_mentions_unretrieved_celex_ecli_or_process():
+    evidence = EvidenceItem(
+        chunk_id="chunk-1",
+        citation_label="[chunk-1]",
+        text="O processo C-311/18 é referido no texto oficial com CELEX:32016R0679 e ECLI:EU:C:2020:559.",
+        source_url="https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX:32016R0679",
+    )
+
+    result = validate_answer(
+        AnswerValidateRequest(
+            question="teste",
+            draft_answer=(
+                "A resposta cita CELEX:32016R0679, ECLI:EU:C:2020:559 e processo C-311/18, "
+                "mas também CELEX:99999X9999, ECLI:PT:STA:2099:FAKE e processo 999/99.9FAKE. [chunk-1]"
+            ),
+            evidence=[evidence],
+        ),
+        _source_policy(),
+    )
+
+    assert result.verdict == ValidatorVerdict.FAIL
+    assert result.hallucinated_identifiers == [
+        "CELEX:99999X9999",
+        "ECLI:PT:STA:2099:FAKE",
+        "processo 999/99.9FAKE",
+    ]
+
+
 def test_validate_answer_passes_when_official_evidence_is_cited():
     evidence = EvidenceItem(
         chunk_id="chunk-1",

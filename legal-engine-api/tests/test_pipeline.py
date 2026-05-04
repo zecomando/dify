@@ -97,6 +97,7 @@ def test_answer_chat_abstains_when_retrieved_chunk_is_not_authoritative(tmp_path
         is_consolidated=False,
         legal_value_warning="",
         area=("civil",),
+        legal_metadata={},
         created_at=now,
         updated_at=now,
     )

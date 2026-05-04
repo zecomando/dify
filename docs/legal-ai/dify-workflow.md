@@ -108,26 +108,29 @@ A regra mantém-se: a decisão jurídica final vem sempre do backend.
 
 ## Importação manual no Dify
 
-1. Abrir Dify.
-2. Escolher importação de app por YAML/DSL.
-3. Importar `docs/legal-ai/dify-chat-answer.yml`.
-4. Confirmar a URL do HTTP node.
-5. Garantir que o `legal-engine-api` está acessível.
-6. Testar uma pergunta com fonte oficial.
-7. Testar uma pergunta-armadilha que deve abster.
+1. Definir `LEGAL_ENGINE_ADMIN_TOKEN`.
+2. Semear o corpus inicial com `uv run --project legal-engine-api legal-seed` ou `POST /admin/corpus/seed`.
+3. Validar o backend local com `uv run --project legal-engine-api legal-demo`.
+4. Abrir Dify.
+5. Escolher importação de app por YAML/DSL.
+6. Importar `docs/legal-ai/dify-chat-answer.yml`.
+7. Confirmar a URL do HTTP node.
+8. Garantir que o `legal-engine-api` está acessível.
+9. Testar uma pergunta com fonte oficial.
+10. Testar uma pergunta sem corpus suficiente que deve abster.
 
 ## Smoke tests recomendados
 
 Pergunta que deve responder com fonte:
 
 ```text
-Quais são os fundamentos de exclusão de propostas no CCP?
+Quais são os pressupostos da responsabilidade civil extracontratual?
 ```
 
-Pergunta que deve abster:
+Pergunta europeia que deve responder com fonte:
 
 ```text
-Explica o artigo 999.º do Código dos Contratos Públicos.
+No RGPD da União Europeia, quais são as bases de licitude para tratamento de dados pessoais?
 ```
 
 Pergunta sem corpus suficiente:

@@ -386,6 +386,151 @@ def test_admin_audit_endpoint_returns_404_for_missing_audit(tmp_path):
     assert response.status_code == 404
 
 
+def test_feedback_answer_endpoint_persists_feedback_and_admin_lists_it(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        answer_response = client.post(
+            "/chat/answer",
+            json={"question": "responsabilidade civil", "session_id": "session-feedback", "user_id": "user-feedback"},
+        )
+        assert answer_response.status_code == 200
+        feedback_response = client.post(
+            "/feedback/answer",
+            json={
+                "audit_id": answer_response.json()["audit_id"],
+                "rating": "negative",
+                "comment": "A resposta devia explicar melhor a abstenção.",
+                "session_id": "session-feedback",
+                "user_id": "user-feedback",
+            },
+        )
+        list_response = client.get("/admin/feedback", headers=ADMIN_HEADERS)
+        filtered_response = client.get(
+            "/admin/feedback",
+            params={"rating": "negative", "session_id": "session-feedback"},
+            headers=ADMIN_HEADERS,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert feedback_response.status_code == 201
+    payload = feedback_response.json()
+    assert payload["audit_id"] == answer_response.json()["audit_id"]
+    assert payload["rating"] == "negative"
+    assert payload["comment"] == "A resposta devia explicar melhor a abstenção."
+    assert payload["created_at"]
+    assert list_response.status_code == 200
+    assert list_response.json()["total"] == 1
+    assert list_response.json()["feedback"][0]["id"] == payload["id"]
+    assert filtered_response.status_code == 200
+    assert filtered_response.json()["total"] == 1
+    assert filtered_response.json()["feedback"][0]["session_id"] == "session-feedback"
+
+
+def test_feedback_answer_endpoint_returns_404_for_missing_audit(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        response = client.post(
+            "/feedback/answer",
+            json={"audit_id": "missing-audit", "rating": "positive"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+
+
+def test_admin_ingestion_jobs_endpoints_list_filter_and_get_jobs(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    source_policy = SourcePolicy.from_file(POLICY_PATH)
+    completed_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nTexto civil.",
+            promote_if_valid=True,
+        ),
+        source_policy,
+        repository,
+    )
+    rejected_response = ingest_source(
+        IngestionSourceRequest(source_url="https://pt.wikipedia.org/wiki/Codigo_Civil"),
+        source_policy,
+        repository,
+    )
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        list_response = client.get("/admin/ingestion/jobs", headers=ADMIN_HEADERS)
+        rejected_list_response = client.get(
+            "/admin/ingestion/jobs",
+            params={"status": "rejected"},
+            headers=ADMIN_HEADERS,
+        )
+        get_response = client.get(f"/admin/ingestion/jobs/{completed_response.job_id}", headers=ADMIN_HEADERS)
+        missing_response = client.get("/admin/ingestion/jobs/missing-job", headers=ADMIN_HEADERS)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert list_response.status_code == 200
+    assert list_response.json()["total"] == 2
+    assert {job["status"] for job in list_response.json()["jobs"]} == {"completed", "rejected"}
+    assert rejected_list_response.status_code == 200
+    assert rejected_list_response.json()["total"] == 1
+    assert rejected_list_response.json()["jobs"][0]["id"] == rejected_response.job_id
+    assert rejected_list_response.json()["jobs"][0]["document_id"] is None
+    assert rejected_list_response.json()["jobs"][0]["error_message"]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == completed_response.job_id
+    assert get_response.json()["status"] == "completed"
+    assert get_response.json()["document_id"] is not None
+    assert missing_response.status_code == 404
+
+
+def test_admin_diagnostics_and_metrics_endpoints_return_operational_counts(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    source_policy = SourcePolicy.from_file(POLICY_PATH)
+    ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nTexto civil.",
+            promote_if_valid=True,
+        ),
+        source_policy,
+        repository,
+    )
+    ingest_source(
+        IngestionSourceRequest(source_url="https://pt.wikipedia.org/wiki/Codigo_Civil"),
+        source_policy,
+        repository,
+    )
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        diagnostics_response = client.get("/admin/diagnostics", headers=ADMIN_HEADERS)
+        metrics_response = client.get("/admin/metrics", headers=ADMIN_HEADERS)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert diagnostics_response.status_code == 200
+    diagnostics = diagnostics_response.json()
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["database_backend"] == "sqlite"
+    assert diagnostics["documents_total"] == 1
+    assert diagnostics["chat_ready_documents"] == 1
+    assert diagnostics["ingestion_jobs_total"] == 2
+    assert diagnostics["ingestion_jobs_completed"] == 1
+    assert diagnostics["ingestion_jobs_rejected"] == 1
+    assert metrics_response.status_code == 200
+    metrics = metrics_response.json()
+    assert metrics["documents"]["chat_ready"] == 1
+    assert metrics["ingestion_jobs"]["completed"] == 1
+    assert metrics["ingestion_jobs"]["rejected"] == 1
+
+
 def test_admin_evaluation_run_endpoint_persists_and_returns_run(tmp_path):
     evals_dir = tmp_path / "evals"
     evals_dir.mkdir()
@@ -436,6 +581,28 @@ def test_admin_evaluation_run_endpoint_returns_404_for_missing_run(tmp_path):
     assert response.status_code == 404
 
 
+def test_admin_corpus_seed_endpoint_is_idempotent(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        first_response = client.post("/admin/corpus/seed", headers=ADMIN_HEADERS)
+        second_response = client.post("/admin/corpus/seed", headers=ADMIN_HEADERS)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first_response.status_code == 202
+    first_payload = first_response.json()
+    second_payload = second_response.json()
+    assert first_payload["created_documents"] == first_payload["total_seeds"]
+    assert first_payload["rejected_jobs"] == 0
+    assert first_payload["pending_review_documents"] == 0
+    assert first_payload["chat_ready_documents"] == first_payload["total_seeds"]
+    assert second_payload["created_documents"] == 0
+    assert second_payload["already_present_documents"] == first_payload["total_seeds"]
+    assert repository.count_documents(status="chat_ready") == first_payload["total_seeds"]
+
+
 def test_admin_endpoints_require_configured_valid_token(monkeypatch):
     missing_header_response = client.get("/admin/documents")
     invalid_header_response = client.get("/admin/documents", headers={"X-Admin-Token": "wrong-token"})
@@ -460,6 +627,11 @@ def test_openapi_smoke_includes_chat_and_admin_endpoints():
     assert "/admin/documents/{document_id}/chunks" in paths
     assert "/admin/documents/{document_id}/status" in paths
     assert "/admin/audits" in paths
+    assert "/admin/corpus/seed" in paths
+    assert "/admin/ingestion/jobs" in paths
+    assert "/admin/ingestion/jobs/{job_id}" in paths
+    assert "/admin/diagnostics" in paths
+    assert "/admin/metrics" in paths
     assert "/admin/evaluation/run" in paths
     assert "/admin/evaluation/runs" in paths
     assert payload["components"]["securitySchemes"]["AdminTokenAuth"] == {

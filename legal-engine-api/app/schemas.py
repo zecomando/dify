@@ -15,6 +15,12 @@ class ValidatorVerdict(StrEnum):
     FAIL = "fail"
 
 
+class AnswerFeedbackRating(StrEnum):
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+    NEUTRAL = "neutral"
+
+
 class IngestionJobStatus(StrEnum):
     PENDING = "pending"
     COMPLETED = "completed"
@@ -56,6 +62,7 @@ class RetrievalSearchRequest(BaseModel):
     area: list[str] = Field(default_factory=list)
     document_types: list[str] = Field(default_factory=list)
     current_only: bool = True
+    as_of_date: str | None = None
     top_k_dense: int = Field(default=40, ge=1, le=200)
     top_k_sparse: int = Field(default=40, ge=1, le=200)
     mode: AnswerMode = AnswerMode.STRICT
@@ -72,9 +79,14 @@ class RetrievalResult(BaseModel):
     score: float = 0.0
     jurisdiction: str | None = None
     document_type: str | None = None
+    area: list[str] = Field(default_factory=list)
+    legal_metadata: dict[str, str] = Field(default_factory=dict)
     citation_label: str | None = None
     is_current: bool = True
     is_consolidated: bool = False
+    version_label: str = "current"
+    valid_from: str | None = None
+    valid_until: str | None = None
 
 
 class RetrievalSearchResponse(BaseModel):
@@ -108,13 +120,21 @@ class EvidenceItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     chunk_id: str
+    document_id: str | None = None
     citation_label: str
     text: str = Field(min_length=1)
     source_url: str
+    canonical_url: str | None = None
     source: str | None = None
+    jurisdiction: str | None = None
+    document_type: str | None = None
+    legal_metadata: dict[str, str] = Field(default_factory=dict)
     is_current: bool = True
     is_consolidated: bool = False
     legal_value_warning: str = ""
+    version_label: str = "current"
+    valid_from: str | None = None
+    valid_until: str | None = None
 
 
 class EvidenceBuildResponse(BaseModel):
@@ -175,6 +195,7 @@ class ChatAnswerRequest(BaseModel):
     jurisdiction: list[str] = Field(default_factory=list)
     document_types: list[str] = Field(default_factory=list)
     current_only: bool | None = None
+    as_of_date: str | None = None
     top_k_dense: int = Field(default=40, ge=1, le=200)
     top_k_sparse: int = Field(default=40, ge=1, le=200)
     top_n: int = Field(default=8, ge=1, le=100)
@@ -243,6 +264,13 @@ class LegalDocumentResponse(BaseModel):
     is_consolidated: bool
     legal_value_warning: str
     area: list[str]
+    legal_metadata: dict[str, str]
+    version_label: str = "current"
+    valid_from: str | None = None
+    valid_until: str | None = None
+    supersedes_document_id: str | None = None
+    archived_at: str | None = None
+    change_note: str = ""
     created_at: str
     updated_at: str
 
@@ -308,6 +336,35 @@ class AnswerAuditListResponse(BaseModel):
     total: int
 
 
+class AnswerFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audit_id: str = Field(min_length=1)
+    rating: AnswerFeedbackRating
+    comment: str | None = Field(default=None, max_length=2000)
+    user_id: str | None = None
+    session_id: str | None = None
+
+
+class AnswerFeedbackResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    audit_id: str
+    rating: AnswerFeedbackRating
+    comment: str | None = None
+    user_id: str | None = None
+    session_id: str | None = None
+    created_at: str
+
+
+class AnswerFeedbackListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: list[AnswerFeedbackResponse]
+    total: int
+
+
 class EvaluationRunSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -327,6 +384,20 @@ class EvaluationRunListResponse(BaseModel):
     total: int
 
 
+class InitialCorpusSeedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total_seeds: int
+    created_documents: int
+    already_present_documents: int
+    completed_jobs: int
+    rejected_jobs: int
+    chat_ready_documents: int
+    pending_review_documents: int
+    document_ids: list[str]
+    rejected_source_urls: list[str]
+
+
 class IngestionSourceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -336,6 +407,13 @@ class IngestionSourceRequest(BaseModel):
     jurisdiction: str | None = None
     document_type: str | None = None
     area: list[str] = Field(default_factory=list)
+    legal_metadata: dict[str, str] = Field(default_factory=dict)
+    version_label: str = "current"
+    valid_from: str | None = None
+    valid_until: str | None = None
+    supersedes_document_id: str | None = None
+    archive_existing_current: bool = False
+    change_note: str = ""
     promote_if_valid: bool = False
 
 
@@ -345,6 +423,7 @@ class CrawlUrlRequest(BaseModel):
     url: str = Field(min_length=1)
     limit: int = Field(default=1, ge=1, le=100)
     only_main_content: bool = True
+    fetch_attempts: int = Field(default=1, ge=1, le=5)
 
 
 class PromoteDocumentRequest(BaseModel):
@@ -375,3 +454,56 @@ class IngestionJobResponse(BaseModel):
 
     job_id: str
     status: IngestionJobStatus
+
+
+class IngestionJobDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    source: str
+    source_url: str
+    requested_by: str | None = None
+    mode: str
+    status: IngestionJobStatus
+    error_message: str | None = None
+    document_id: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class IngestionJobListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    jobs: list[IngestionJobDetailResponse]
+    total: int
+
+
+class AdminDiagnosticsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    database_backend: str
+    source_policy_name: str
+    source_policy_version: int
+    documents_total: int
+    chat_ready_documents: int
+    pending_review_documents: int
+    archived_documents: int
+    rejected_documents: int
+    ingestion_jobs_total: int
+    ingestion_jobs_completed: int
+    ingestion_jobs_rejected: int
+    ingestion_jobs_pending: int
+    answer_audits_total: int
+    answer_feedback_total: int
+    evaluation_runs_total: int
+
+
+class AdminMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    documents: dict[str, int]
+    ingestion_jobs: dict[str, int]
+    answer_audits: dict[str, int]
+    answer_feedback: dict[str, int]
+    evaluation_runs: dict[str, int]

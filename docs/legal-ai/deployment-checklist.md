@@ -4,6 +4,20 @@
 
 Checklist obrigatória para entrada em staging, beta privada e produção.
 
+## Estado local atual
+
+Validações implementadas e cobertas no `legal-engine-api`:
+
+- Source policy carregada em runtime e aplicada a domínios, tipos documentais, metadados e identificadores obrigatórios.
+- Ingestão local guarda texto bruto, calcula SHA-256, cria chunks e só promove para `chat_ready` quando há chunks e requisitos da policy.
+- Promoção manual/admin respeita requisitos da source policy antes de aceitar `chat_ready`.
+- Retrieval lexical local aplica filtros de jurisdição, tipo documental, vigência e área quando o chunk tem área preenchida.
+- Evidence builder exclui fontes não oficiais e fontes sem requisitos obrigatórios.
+- Validador bloqueia URLs não recuperadas e identificadores jurídicos inventados, incluindo artigos, processos, ECLI e CELEX.
+- Auditoria de respostas e runs de avaliação persistidos localmente.
+
+Última validação local: `uv run pytest` e `uv run ruff check app tests` em `legal-engine-api`, ambos sem falhas.
+
 ## 1. Produto
 
 - [ ] Modo Estrito é o default.

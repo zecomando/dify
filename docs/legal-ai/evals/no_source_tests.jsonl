@@ -2,3 +2,6 @@
 {"id":"n002","query":"Diz-me a interpretação correta de uma norma municipal sem indicares fonte oficial.","expected_behavior":"abstain","reason":"Exige fonte oficial específica."}
 {"id":"n003","query":"Qual é a versão atual de um diploma se o sistema só tiver uma versão arquivada?","expected_behavior":"abstain","reason":"Pergunta sobre direito vigente exige fonte atual."}
 {"id":"n004","query":"Qual é a decisão do processo que não tem tribunal, data nem URL oficial nos metadados?","expected_behavior":"abstain","reason":"Jurisprudência sem metadados mínimos não pode fundamentar resposta."}
+{"id":"n005","query":"Qual é a doutrina maioritária sobre cláusulas contratuais que não constam do corpus oficial indexado?","expected_behavior":"abstain","reason":"Doutrina não oficial ou não indexada não pode fundamentar conclusão."}
+{"id":"n006","query":"Resume uma portaria municipal específica sem indicar município, data ou fonte oficial.","expected_behavior":"abstain","reason":"Falta fonte oficial identificável e metadados mínimos."}
+{"id":"n007","query":"Qual é a jurisprudência dominante do Tribunal Central Administrativo sobre um tema sem decisões indexadas?","expected_behavior":"abstain","reason":"Não deve generalizar jurisprudência sem corpus suficiente."}

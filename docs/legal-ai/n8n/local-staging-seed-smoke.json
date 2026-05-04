@@ -1,0 +1,160 @@
+{
+  "name": "Legal AI - Local Staging Seed Smoke",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/corpus/seed' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "seed-corpus",
+      "name": "Seed Corpus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/documents?status=chat_ready&limit=20' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "list-chat-ready-documents",
+      "name": "List Chat Ready Documents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/chat/answer' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"question\":\"Quais são os pressupostos da responsabilidade civil?\",\"mode\":\"strict\",\"top_k_dense\":5,\"top_k_sparse\":5,\"top_n\":3}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "canonical-chat-answer",
+      "name": "Canonical Chat Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nif (!response.audit_id) {\n  throw new Error('Smoke failed: missing audit_id.');\n}\nif (response.verdict !== 'pass') {\n  throw new Error(`Smoke failed: expected pass, got ${response.verdict}.`);\n}\nif (!Array.isArray(response.evidence) || response.evidence.length === 0) {\n  throw new Error('Smoke failed: expected official evidence.');\n}\nreturn [{ json: { status: 'passed', audit_id: response.audit_id, evidence_count: response.evidence.length, verdict: response.verdict } }];"
+      },
+      "id": "validate-smoke",
+      "name": "Validate Smoke",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Seed Corpus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed Corpus": {
+      "main": [
+        [
+          {
+            "node": "List Chat Ready Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Chat Ready Documents": {
+      "main": [
+        [
+          {
+            "node": "Canonical Chat Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canonical Chat Answer": {
+      "main": [
+        [
+          {
+            "node": "Validate Smoke",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "legal-ai"
+    },
+    {
+      "name": "smoke"
+    }
+  ],
+  "versionId": "legal-ai-local-staging-seed-smoke-v1"
+}

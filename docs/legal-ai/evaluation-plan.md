@@ -23,6 +23,17 @@ eval_dataset:
   citation_tests: 30
 ```
 
+## Dataset local versionado
+
+O dataset determinístico atual em `docs/legal-ai/evals/` contém 33 casos:
+
+- `benchmark_50_questions.jsonl`: 18 perguntas canónicas com fontes esperadas.
+- `expected_sources.jsonl`: 13 mapeamentos explícitos de domínio/fonte esperada.
+- `no_source_tests.jsonl`: 7 perguntas que devem abster sem corpus suficiente.
+- `hallucination_tests.jsonl`: 8 regressões contra identificadores jurídicos inventados.
+
+A cobertura local inclui DRE, EUR-Lex, DGSI, Tribunal Constitucional, Curia/TJUE, HUDOC/CEDH, TED e BASE, alinhada com o corpus seedado do MVP.
+
 ## Tipos de teste
 
 ### Perguntas de artigo
@@ -160,6 +171,8 @@ GET /admin/evaluation/runs/{run_id}
 ```
 
 O histórico persistido inclui métricas, quality gates e casos falhados. O workflow `.github/workflows/legal-engine-api.yml` executa `ruff`, `pytest` e `uv run --project legal-engine-api legal-eval` em alterações de `legal-engine-api/**` e `docs/legal-ai/**`.
+
+Estado validado localmente: `passed=True`, `total=33`, `failed=0`.
 
 ## Classificação de erros
 

@@ -4,6 +4,30 @@
 
 Criar um pipeline fiável para transformar fontes oficiais em documentos, chunks e evidências utilizáveis no chat jurídico.
 
+## Estado local validado
+
+O `legal-engine-api` já implementa a ingestão local determinística necessária para demo técnica:
+
+- `POST /ingestion/source` aceita URL oficial, texto bruto opcional, metadados jurídicos e flag de promoção.
+- `POST /ingestion/crawl-url` faz fetch HTTP inicial para DRE/EUR-Lex, normaliza HTML/texto, extrai metadados básicos e cria documento/job.
+- `legal-seed` e `POST /admin/corpus/seed` criam um corpus inicial oficial e idempotente por `source_url`.
+- O texto bruto é persistido quando fornecido.
+- O SHA-256 é calculado a partir da URL e do texto bruto.
+- O chunking por artigo cria chunks rastreáveis ao documento.
+- `legal_metadata` é persistido e propagado para retrieval, evidence e respostas.
+- A source policy bloqueia domínios não oficiais e impede `chat_ready` quando faltam requisitos jurídicos.
+- `POST /admin/reindex` reprocessa documentos a partir do bruto persistido.
+- `GET /admin/ingestion/jobs` e `GET /admin/ingestion/jobs/{job_id}` permitem diagnóstico operacional.
+
+Ainda não implementado:
+
+- Fetch remoto robusto para todas as fontes oficiais.
+- Parsing robusto de PDF/XML e HTML complexo.
+- Extração automática completa de metadados jurídicos.
+- Hardening de embeddings externos e vector store de produção.
+- Arquivo automático de versões anteriores.
+- Fila de aprovação humana para jurisprudência e fontes sensíveis.
+
 ## Princípios
 
 - Guardar sempre o bruto antes de processar.
@@ -14,6 +38,28 @@ Criar um pipeline fiável para transformar fontes oficiais em documentos, chunks
 - Manter versões antigas para auditoria e perguntas históricas.
 
 ## Pipeline comum
+
+### Pipeline local atual
+
+```text
+seed/manual/crawl source
+  ↓
+Validação de domínio e authority rule
+  ↓
+Fetch/parsing inicial quando `/ingestion/crawl-url` suporta a autoridade
+  ↓
+Guardar documento, texto bruto, SHA-256 e metadados declarados ou extraídos
+  ↓
+Chunking por artigo
+  ↓
+Validação de requisitos mínimos da source policy
+  ↓
+Promoção para chat_ready ou pending_review
+  ↓
+Retrieval lexical/evidence/auditoria
+```
+
+### Pipeline alvo beta/produção
 
 ```text
 URL/API/seed
@@ -41,18 +87,49 @@ Indexação vetorial
 Promoção para chat_ready ou pending_review
 ```
 
+## Ordem de implementação restante
+
+1. **Hardening do fetch remoto DRE/EUR-Lex**
+   - O adapter HTTP inicial já existe com timeout, limite de bytes e user-agent identificável.
+   - Falta adicionar retries/backoff configurável e métricas operacionais.
+   - Manter rejeição ou `pending_review` quando a extração for incompleta.
+
+2. **Parser robusto por fonte**
+   - DRE: HTML consolidado simples já entra como texto/artigos; falta parsing estrutural completo.
+   - EUR-Lex: CELEX e tipo de ato básico já são extraídos; faltam anexos, ELI e versões consolidadas robustas.
+   - HUDOC/Curia/DGSI: metadados mínimos e corpo decisório apenas com aprovação humana.
+
+3. **Hardening de embeddings e vector store**
+   - `EmbeddingProvider` local determinístico e índice SQLite já existem.
+   - Falta criar adapters externos de embeddings e vector store.
+   - Guardar identificadores externos por chunk quando Pinecone/Qdrant estiver ativo.
+   - Manter retrieval lexical como fallback determinístico e para testes.
+
+4. **Versionamento**
+   - Quando o hash mudar, criar nova versão documental.
+   - Marcar versão anterior como `archived`.
+   - Preservar cadeia de alteração para perguntas “à data de”.
+
+5. **Revisão humana**
+   - Jurisprudência começa sempre em `pending_review`.
+   - Promoção exige metadados mínimos, fonte oficial e aprovação.
+   - Rejeição deve guardar motivo auditável.
+
 ## Estados
 
-- `raw`
-- `fetched`
-- `parsed`
-- `normalized`
-- `chunked`
-- `embedded`
-- `validated`
-- `chat_ready`
-- `archived`
-- `rejected`
+- `raw`: bruto guardado, ainda sem parsing.
+- `fetched`: URL oficial recolhida com sucesso.
+- `parsed`: texto estruturado extraído.
+- `normalized`: metadados e estrutura normalizados.
+- `chunked`: chunks criados e persistidos.
+- `embedded`: embeddings criados e indexados.
+- `validated`: requisitos de qualidade cumpridos.
+- `pending_review`: requer revisão humana ou metadados adicionais.
+- `chat_ready`: elegível para fundamentar respostas.
+- `archived`: versão antiga preservada para auditoria/perguntas históricas.
+- `rejected`: fonte rejeitada, com motivo guardado no job.
+
+No MVP local, os estados persistidos são simplificados para `pending_review`, `chat_ready`, `archived` e `rejected`, com jobs de ingestão/reindexação a indicar `pending`, `completed` ou `rejected`.
 
 ## DRE
 
@@ -252,8 +329,25 @@ Um documento só pode ser promovido para `chat_ready` se:
 - Metadados mínimos presentes.
 - Chunks não vazios.
 - Hash guardado.
-- Embeddings criados.
 - Source policy cumprida.
+
+Para beta/produção, acrescentar:
+
+- Embeddings externos criados.
+- Chunks indexados no vector store externo.
+- `vector_id` externo persistido por chunk.
+- Avisos de consolidação/vigência presentes quando aplicável.
+- Jurisprudência aprovada por humano quando a source policy ou critérios editoriais exigirem.
+
+## Critérios por fonte antes de `chat_ready`
+
+- **DRE:** artigo ou identificador legal preservado; vigência/consolidação marcada; aviso de texto consolidado quando aplicável.
+- **EUR-Lex:** CELEX preservado; tipo de ato correto; versão consolidada marcada quando aplicável.
+- **DGSI:** tribunal, data e processo presentes; decisão selecionada por critério editorial; aprovação humana.
+- **Tribunal Constitucional:** número de acórdão/processo e data presentes.
+- **Curia/TJUE:** tribunal, data, número de processo e ECLI quando disponível.
+- **HUDOC/TEDH:** application number, court e decision date presentes.
+- **BASE/TED:** separar dado de contratação pública de conclusão jurídica; CPV/notice ID quando disponível.
 
 ## Reprocessamento
 
@@ -264,3 +358,11 @@ Reprocessar quando:
 - Chunker muda.
 - Modelo de embeddings muda.
 - Política de fonte muda.
+
+O reprocessamento deve sempre:
+
+- Criar job consultável em `/admin/ingestion/jobs`.
+- Manter o documento anterior auditável até a nova versão estar validada.
+- Recalcular chunks e embeddings.
+- Executar smoke retrieval/evidence em amostra canónica.
+- Alertar operador quando documentos forem movidos para `pending_review` ou `rejected`.

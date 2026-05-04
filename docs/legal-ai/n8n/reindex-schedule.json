@@ -1,0 +1,170 @@
+{
+  "name": "Legal AI - Reindex Schedule",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 4,
+              "triggerAtMinute": 15
+            }
+          ]
+        }
+      },
+      "id": "weekly-schedule",
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = { force: true };\nif ($env.LEGAL_ENGINE_REINDEX_SOURCE) {\n  payload.source = $env.LEGAL_ENGINE_REINDEX_SOURCE;\n}\nif ($env.LEGAL_ENGINE_REINDEX_JURISDICTION) {\n  payload.jurisdiction = $env.LEGAL_ENGINE_REINDEX_JURISDICTION;\n}\nif ($env.LEGAL_ENGINE_REINDEX_DOCUMENT_IDS) {\n  payload.document_ids = $env.LEGAL_ENGINE_REINDEX_DOCUMENT_IDS.split(',').map((item) => item.trim()).filter(Boolean);\n}\nreturn [{ json: payload }];"
+      },
+      "id": "prepare-reindex-payload",
+      "name": "Prepare Reindex Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/reindex' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "run-reindex",
+      "name": "Run Reindex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/ingestion/jobs/' + $json.job_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-reindex-job",
+      "name": "Get Reindex Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $json;\nif (job.status !== 'completed') {\n  throw new Error(`Reindex did not complete: status=${job.status}; error=${job.error_message || 'none'}`);\n}\nreturn [{ json: { status: 'passed', job_id: job.job_id || job.id, document_id: job.document_id || null, source: job.source || null } }];"
+      },
+      "id": "validate-reindex-job",
+      "name": "Validate Reindex Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reindex Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reindex Payload": {
+      "main": [
+        [
+          {
+            "node": "Run Reindex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Reindex": {
+      "main": [
+        [
+          {
+            "node": "Get Reindex Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Reindex Job": {
+      "main": [
+        [
+          {
+            "node": "Validate Reindex Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon"
+  },
+  "pinData": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "legal-ai"
+    },
+    {
+      "name": "reindex"
+    }
+  ],
+  "versionId": "legal-ai-reindex-schedule-v1"
+}

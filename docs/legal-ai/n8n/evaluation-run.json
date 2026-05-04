@@ -1,0 +1,191 @@
+{
+  "name": "Legal AI - Evaluation Run",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 5,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "daily-schedule",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = {};\nif ($env.LEGAL_ENGINE_EVALS_DIR) {\n  payload.evals_dir = $env.LEGAL_ENGINE_EVALS_DIR;\n}\nreturn [{ json: payload }];"
+      },
+      "id": "prepare-evaluation-payload",
+      "name": "Prepare Evaluation Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/evaluation/run' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-evaluation",
+      "name": "Run Evaluation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const run = $json;\nconst runId = run.run_id || run.id || run.evaluation_run_id;\nif (!runId) {\n  throw new Error('Evaluation response did not include run_id.');\n}\nreturn [{ json: { run_id: runId } }];"
+      },
+      "id": "extract-run-id",
+      "name": "Extract Run ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/evaluation/runs/' + $json.run_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-evaluation-run",
+      "name": "Get Evaluation Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const run = $json;\nif (run.passed !== true) {\n  throw new Error(`Evaluation failed: run_id=${run.run_id || run.id}; failed_cases=${run.failed_cases || 0}`);\n}\nreturn [{ json: { status: 'passed', run_id: run.run_id || run.id, total_cases: run.total_cases, successful_cases: run.successful_cases, failed_cases: run.failed_cases } }];"
+      },
+      "id": "validate-evaluation",
+      "name": "Validate Evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare Evaluation Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Evaluation Payload": {
+      "main": [
+        [
+          {
+            "node": "Run Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Extract Run ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Run ID": {
+      "main": [
+        [
+          {
+            "node": "Get Evaluation Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Evaluation Run": {
+      "main": [
+        [
+          {
+            "node": "Validate Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon"
+  },
+  "pinData": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "legal-ai"
+    },
+    {
+      "name": "evaluation"
+    }
+  ],
+  "versionId": "legal-ai-evaluation-run-v1"
+}
