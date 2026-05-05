@@ -221,7 +221,7 @@ Critério de aceitação:
 
 ### Milestone 8 — Dify workflow
 
-Estado: **workflow importável feito; teste no ambiente Dify alvo pendente**.
+Estado: **workflow importável e UX jurídica mínima feitos; teste no ambiente Dify alvo pendente**.
 
 Entregáveis:
 
@@ -230,6 +230,7 @@ Entregáveis:
 - Branching por veredicto.
 - Exibição de fontes.
 - Exibição de `audit_id`.
+- Exibição de abstenção segura, avisos, confiança operacional e instrução de feedback.
 - Smoke seed-to-chat executado antes da demo Dify.
 
 Critério de aceitação:
@@ -253,7 +254,7 @@ Critério de aceitação:
 
 ### Milestone 10 — Operação beta privada
 
-Estado: **pendente**.
+Estado: **API operacional parcial feita; UI/admin dedicada, n8n e lista editorial pendentes**.
 
 Entregáveis:
 
@@ -264,6 +265,10 @@ Entregáveis:
 - Feedback por resposta via API local.
 - Lista editorial de jurisprudência selecionada.
 - Runbook de incidentes exercitado em staging.
+- Aprovação/rejeição/arquivo via Admin API com `change_note` obrigatório e blockers explícitos de `chat_ready`.
+- Fila operacional via `/admin/documents/review-queue` com blockers e elegibilidade de promoção.
+- Helper local `legal-review-queue` para consultar a mesma fila sem iniciar FastAPI.
+- Helper local `legal-ingestion-jobs` para consultar jobs, erros e documentos associados sem iniciar FastAPI.
 
 Critério de aceitação:
 

@@ -816,7 +816,7 @@ class LegalRepository:
                     change_note
                 FROM legal_documents
                 WHERE source_url = ?
-                ORDER BY updated_at DESC, created_at DESC, id ASC
+                ORDER BY is_current DESC, updated_at DESC, created_at DESC, id ASC
                 LIMIT 1
                 """,
                 (source_url,),

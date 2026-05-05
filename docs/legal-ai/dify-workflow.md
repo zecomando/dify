@@ -4,6 +4,8 @@
 
 Usar Dify como interface de chat, mantendo a decisão jurídica crítica no `legal-engine-api`.
 
+Esta é a UI recomendada para piloto e beta curta. A decisão completa de UI, incluindo comparação com LibreChat, Open WebUI, AnythingLLM e UI própria, está em `docs/legal-ai/adr/0004-ui-strategy.md`.
+
 O workflow Dify não deve gerar nem validar direito. Deve apenas:
 
 - receber a pergunta do utilizador;
@@ -79,6 +81,7 @@ O Dify deve tratar estes campos como canónicos:
 - `warnings`
 - `unsupported_claims`
 - `missing_citations`
+- `wrong_version_risk`
 - `hallucinated_identifiers`
 
 O campo `answer` já é a resposta final segura. O Dify não deve mostrar qualquer draft.
@@ -90,9 +93,24 @@ O campo `answer` já é a resposta final segura. O Dify não deve mostrar qualqu
 - Mostrar `audit_id`.
 - Mostrar fontes oficiais a partir de `evidence`.
 - Mostrar `warnings` quando existirem.
+- Mostrar abstenção como resultado seguro, não como falha de produto.
+- Mostrar instrução de feedback/revisão ligada ao `audit_id`.
 - Não mostrar raciocínio interno.
 - Não gerar resposta alternativa no Dify.
 - Não chamar LLM node para responder juridicamente.
+
+## UX jurídica mínima para piloto
+
+O node `Format safe answer` apresenta sempre a resposta em secções estáveis:
+
+- **Resposta jurídica validada**, **Abstenção segura** ou **Resposta bloqueada pelo validador**.
+- **Base legal, jurisprudência e fontes oficiais** com links, fonte, jurisdição, tipo documental, versão e identificadores jurídicos quando existirem.
+- **Limites e confiança** com `verdict`, confiança operacional derivada do veredicto/evidência, `audit_id` e aviso de uso experimental.
+- **Feedback e revisão** com instrução para classificar o problema por categoria usando o `audit_id`.
+- **Avisos visíveis** para texto consolidado, fonte não vigente, aviso de valor legal ou outros warnings do backend.
+- **Validação** apenas quando houver claims sem suporte, citações em falta, identificadores bloqueados ou risco temporal.
+
+As categorias operacionais de feedback esperadas são: fonte errada, resposta incompleta, erro jurídico, resposta vaga, fonte desatualizada e outro.
 
 ## Branching
 
@@ -110,7 +128,7 @@ A regra mantém-se: a decisão jurídica final vem sempre do backend.
 
 1. Definir `LEGAL_ENGINE_ADMIN_TOKEN`.
 2. Semear o corpus inicial com `uv run --project legal-engine-api legal-seed` ou `POST /admin/corpus/seed`.
-3. Validar o backend local com `uv run --project legal-engine-api legal-demo`.
+3. Validar o backend local com `uv run --project legal-engine-api legal-smoke --json`.
 4. Abrir Dify.
 5. Escolher importação de app por YAML/DSL.
 6. Importar `docs/legal-ai/dify-chat-answer.yml`.

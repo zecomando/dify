@@ -14,7 +14,7 @@ workflow:
   features:
     file_upload:
       enabled: false
-    opening_statement: 'Faça uma pergunta jurídica. O sistema responde apenas quando existir evidência oficial suficiente.'
+    opening_statement: 'Faça uma pergunta jurídica. O sistema responde apenas quando existir evidência oficial suficiente. Uso experimental: não substitui a análise de um advogado.'
     retriever_resource:
       enabled: false
     sensitive_word_avoidance:
@@ -140,55 +140,153 @@ workflow:
         code: |-
           import json
 
+          def _safe_text(value):
+              if value is None:
+                  return ""
+              return str(value).strip()
+
           def _line_list(values):
               if not values:
                   return "Nenhum."
-              return "\n".join(f"- {value}" for value in values)
+              return "\n".join(f"- {value}" for value in values if value)
+
+          def _unique(values):
+              unique_values = []
+              for value in values:
+                  safe_value = _safe_text(value)
+                  if safe_value and safe_value not in unique_values:
+                      unique_values.append(safe_value)
+              return unique_values
+
+          def _identifier_lines(metadata):
+              if not isinstance(metadata, dict):
+                  return []
+              labels = {
+                  "eli": "ELI",
+                  "celex": "CELEX",
+                  "ecli": "ECLI",
+                  "process_number": "Processo",
+                  "case_number": "Processo TJUE",
+                  "application_number": "Queixa TEDH",
+                  "article": "Artigo",
+                  "articles": "Artigos",
+              }
+              lines = []
+              for key, label in labels.items():
+                  value = _safe_text(metadata.get(key))
+                  if value:
+                      lines.append(f"{label}: {value}")
+              return lines
+
+          def _format_source_item(item, index):
+              citation = (
+                  _safe_text(item.get("citation_label"))
+                  or _safe_text(item.get("document_title"))
+                  or f"Fonte {index}"
+              )
+              url = _safe_text(item.get("canonical_url")) or _safe_text(item.get("source_url"))
+              heading = f"{index}. [{citation}]({url})" if url else f"{index}. {citation}"
+              details = []
+              source = _safe_text(item.get("source"))
+              jurisdiction = _safe_text(item.get("jurisdiction"))
+              document_type = _safe_text(item.get("document_type"))
+              version_label = _safe_text(item.get("version_label"))
+              if source:
+                  details.append(f"Fonte: {source}")
+              if jurisdiction:
+                  details.append(f"Jurisdição: {jurisdiction}")
+              if document_type:
+                  details.append(f"Tipo: {document_type}")
+              if version_label:
+                  current_label = "vigente" if item.get("is_current", True) else "não vigente"
+                  details.append(f"Versão: {version_label} ({current_label})")
+              details.extend(_identifier_lines(item.get("legal_metadata", {})))
+              legal_value_warning = _safe_text(item.get("legal_value_warning"))
+              if legal_value_warning:
+                  details.append(f"Aviso: {legal_value_warning}")
+              if not details:
+                  return heading
+              return heading + "\n   - " + "\n   - ".join(details)
 
           def _format_sources(evidence):
               if not evidence:
                   return "Nenhuma fonte oficial utilizável foi encontrada."
-              lines = []
+              return "\n".join(_format_source_item(item, index + 1) for index, item in enumerate(evidence))
+
+          def _evidence_warnings(evidence):
+              warnings = []
               for item in evidence:
-                  label = item.get("citation_label") or item.get("document_title") or item.get("source_url") or "Fonte"
-                  url = item.get("source_url", "")
-                  lines.append(f"- {label}: {url}" if url else f"- {label}")
-              return "\n".join(lines)
+                  citation = _safe_text(item.get("citation_label")) or "fonte"
+                  if not item.get("is_current", True):
+                      warnings.append(f"{citation}: fonte marcada como não vigente.")
+                  if item.get("is_consolidated"):
+                      warnings.append(f"{citation}: texto consolidado ou documental; confirmar valor legal aplicável.")
+                  legal_value_warning = _safe_text(item.get("legal_value_warning"))
+                  if legal_value_warning:
+                      warnings.append(legal_value_warning)
+              return warnings
+
+          def _confidence_label(verdict, evidence_count):
+              if verdict == "pass" and evidence_count > 0:
+                  return "alta para apoio à investigação: há evidência oficial e a validação passou."
+              if verdict == "abstain":
+                  return "segura por abstenção: não há suporte oficial suficiente para conclusão jurídica."
+              return "bloqueada: a validação não autorizou uma conclusão jurídica."
+
+          def _feedback_instruction(audit_id):
+              categories = "fonte errada, resposta incompleta, erro jurídico, resposta vaga, fonte desatualizada ou outro"
+              if audit_id == "não disponível":
+                  return f"Feedback deve indicar a categoria ({categories}), mas esta resposta não trouxe Audit ID."
+              return f"Para revisão ou feedback, registe o Audit ID `{audit_id}` e classifique o problema como: {categories}."
 
           def main(response_body: str, status_code: int) -> dict:
               if status_code < 200 or status_code >= 300:
                   return {
-                      "formatted_answer": "O serviço jurídico não conseguiu validar a resposta com segurança neste momento. Por isso, não devo fornecer uma conclusão jurídica."
+                      "formatted_answer": "## Serviço temporariamente indisponível\nO serviço jurídico não conseguiu validar a resposta com segurança neste momento. Por isso, não devo fornecer uma conclusão jurídica."
                   }
 
               try:
                   payload = json.loads(response_body)
               except Exception:
                   return {
-                      "formatted_answer": "O serviço jurídico devolveu uma resposta inválida. Por segurança, não devo fornecer uma conclusão jurídica."
+                      "formatted_answer": "## Resposta inválida\nO serviço jurídico devolveu uma resposta inválida. Por segurança, não devo fornecer uma conclusão jurídica."
                   }
 
-              verdict = payload.get("verdict", "abstain")
-              answer = payload.get("answer", "")
-              audit_id = payload.get("audit_id") or "não disponível"
-              warnings = payload.get("warnings", [])
+              verdict = _safe_text(payload.get("verdict")) or "abstain"
+              answer = _safe_text(payload.get("answer")) or "Não foi possível construir uma resposta jurídica segura."
+              audit_id = _safe_text(payload.get("audit_id")) or "não disponível"
               evidence = payload.get("evidence", [])
+              if not isinstance(evidence, list):
+                  evidence = []
+              warnings = _unique(list(payload.get("warnings", [])) + _evidence_warnings(evidence))
               unsupported_claims = payload.get("unsupported_claims", [])
               missing_citations = payload.get("missing_citations", [])
               hallucinated_identifiers = payload.get("hallucinated_identifiers", [])
+              title = "Resposta jurídica validada"
+              if verdict == "abstain":
+                  title = "Abstenção segura"
+              elif verdict == "fail":
+                  title = "Resposta bloqueada pelo validador"
 
               formatted = [
+                  f"## {title}",
                   answer,
                   "",
-                  f"Veredicto: {verdict}",
-                  f"Audit ID: {audit_id}",
-                  "",
-                  "Fontes oficiais:",
+                  "## Base legal, jurisprudência e fontes oficiais",
                   _format_sources(evidence),
+                  "",
+                  "## Limites e confiança",
+                  f"- Veredicto: {verdict}",
+                  f"- Confiança operacional: {_confidence_label(verdict, len(evidence))}",
+                  f"- Audit ID: {audit_id}",
+                  "- Este output é apoio à investigação jurídica e não substitui a análise de um advogado.",
+                  "",
+                  "## Feedback e revisão",
+                  _feedback_instruction(audit_id),
               ]
 
               if warnings:
-                  formatted.extend(["", "Avisos:", _line_list(warnings)])
+                  formatted.extend(["", "## Avisos visíveis", _line_list(warnings)])
 
               issues = []
               if unsupported_claims:
@@ -197,8 +295,10 @@ workflow:
                   issues.append("Citações em falta:\n" + _line_list(missing_citations))
               if hallucinated_identifiers:
                   issues.append("Identificadores bloqueados:\n" + _line_list(hallucinated_identifiers))
+              if payload.get("wrong_version_risk"):
+                  issues.append("Risco temporal ou de versão: confirmar vigência antes de usar.")
               if issues:
-                  formatted.extend(["", "Validação:", "\n".join(issues)])
+                  formatted.extend(["", "## Validação", "\n".join(issues)])
 
               return {"formatted_answer": "\n".join(formatted)}
         code_language: python3

@@ -159,7 +159,7 @@ def _parse_case_law(source_url: str, raw_text: str, authority: SourcePolicyAutho
         else _first_allowed_document_type(authority.allowed_document_types),
         area=(_case_law_area(raw_text, authority.source),),
         legal_metadata=_case_law_metadata(source_url, raw_text, authority.source),
-        promote_if_valid=True,
+        promote_if_valid=False,
     )
 
 

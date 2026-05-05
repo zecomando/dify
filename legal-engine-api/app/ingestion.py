@@ -60,16 +60,25 @@ def _ingest_source_payload(
         authority.allowed_document_types if authority else []
     )
     raw_text = payload.raw_text or ""
+    source_hash = _source_hash(payload.source_url, raw_text)
     legal_metadata = _normalize_legal_metadata(payload.legal_metadata)
+    existing_current_document = repository.get_document_by_source_url(payload.source_url)
     supersedes_document_id = payload.supersedes_document_id
-    if payload.archive_existing_current:
-        archived_document = repository.archive_current_document_version(
+    if (
+        existing_current_document is not None
+        and existing_current_document.is_current
+        and existing_current_document.sha256 == source_hash
+        and not payload.archive_existing_current
+    ):
+        return _create_ingestion_job(
+            source=source,
             source_url=payload.source_url,
-            valid_until=payload.valid_from,
-            change_note=payload.change_note or "Superseded by a newer ingested document version.",
+            mode=mode,
+            status=IngestionJobStatus.COMPLETED,
+            error_message=None,
+            document_id=existing_current_document.id,
+            repository=repository,
         )
-        if archived_document is not None and supersedes_document_id is None:
-            supersedes_document_id = archived_document.id
     source_requirement_violations = (
         validate_source_requirements(
             authority,
@@ -99,6 +108,19 @@ def _ingest_source_payload(
         )
         repository.create_job(job)
         return IngestionJobResponse(job_id=job.id, status=IngestionJobStatus.REJECTED)
+    should_archive_current_document = payload.archive_existing_current or (
+        existing_current_document is not None
+        and existing_current_document.is_current
+        and existing_current_document.sha256 != source_hash
+    )
+    if should_archive_current_document:
+        archived_document = repository.archive_current_document_version(
+            source_url=payload.source_url,
+            valid_until=payload.valid_from,
+            change_note=payload.change_note or "Superseded by a newer ingested document version.",
+        )
+        if archived_document is not None and supersedes_document_id is None:
+            supersedes_document_id = archived_document.id
     document_id = str(uuid4())
     chunks = chunk_text(raw_text, document_id=document_id, created_at=now)
     document_status = (
@@ -113,7 +135,7 @@ def _ingest_source_payload(
         title=_document_title(source, payload.source_url),
         source_url=payload.source_url,
         status=document_status,
-        sha256=_source_hash(payload.source_url, raw_text),
+        sha256=source_hash,
         is_current=True,
         is_consolidated=bool(authority.requires_consolidation_warning if authority else False),
         legal_value_warning=legal_value_warning,

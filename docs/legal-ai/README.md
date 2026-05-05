@@ -19,6 +19,7 @@ O sistema não é uma IA que sabe Direito. É um assistente que só responde jur
 - **`ingestion-plan.md`** — pipelines de ingestão para DRE, EUR-Lex, DGSI, Curia, HUDOC, BASE e TED.
 - **`retrieval-validation-policy.md`** — política de retrieval, evidence building e anti-alucinação.
 - **`dify-workflow.md`** — desenho do workflow principal em Dify.
+- **`adr/0004-ui-strategy.md`** — matriz e decisão sobre Dify, alternativas open source e UI própria.
 - **`n8n-workflows.md`** — automações assíncronas de ingestão e monitorização.
 - **`evaluation-plan.md`** — plano de qualidade, datasets, métricas e gates.
 - **`observability-and-audit.md`** — tracing, auditoria e monitorização operacional.
@@ -54,6 +55,7 @@ A implementação local vive em `legal-engine-api/` e fornece:
 
 - **Pipeline orquestrado** em `POST /chat/answer`.
 - **Workflow Dify importável** em `dify-chat-answer.yml`.
+- **Estratégia de UI versionada** em `adr/0004-ui-strategy.md`: Dify para piloto/beta curta e UI própria para produção robusta se a beta validar.
 - **Admin mínimo protegido por `X-Admin-Token`** para documentos, chunks, jobs, auditorias, feedback e avaliações.
 - **Corpus inicial determinístico** via CLI `legal-seed` ou `POST /admin/corpus/seed`.
 - **Auditoria de respostas** em `GET /admin/audit/{answer_id}` e feedback por resposta em `POST /feedback/answer`.

@@ -322,6 +322,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LegalDocumentListResponse"
+  /admin/documents/review-queue:
+    get:
+      summary: List pending documents with review blockers
+      operationId: listLegalDocumentReviewQueue
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: jurisdiction
+          in: query
+          schema:
+            type: string
+        - name: document_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Pending review document queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDocumentReviewQueueResponse"
   /admin/documents/{document_id}:
     get:
       summary: Retrieve a legal document
@@ -416,6 +455,10 @@ paths:
                 $ref: "#/components/schemas/AdminDocumentStatusResponse"
         "404":
           description: Document not found
+        "409":
+          description: Document cannot be promoted to chat_ready
+        "422":
+          description: Missing or invalid review note
   /admin/audits:
     get:
       summary: List answer audit summaries
@@ -1305,6 +1348,33 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LegalDocumentResponse"
+        total:
+          type: integer
+    AdminDocumentReviewQueueItem:
+      type: object
+      required:
+        - document
+        - can_promote_to_chat_ready
+        - promotion_blockers
+      properties:
+        document:
+          $ref: "#/components/schemas/LegalDocumentResponse"
+        can_promote_to_chat_ready:
+          type: boolean
+        promotion_blockers:
+          type: array
+          items:
+            type: string
+    AdminDocumentReviewQueueResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminDocumentReviewQueueItem"
         total:
           type: integer
     LegalChunkResponse:

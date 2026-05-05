@@ -337,6 +337,160 @@ def test_admin_document_endpoints_return_404_for_missing_document(tmp_path):
     assert status_response.status_code == 404
 
 
+def test_admin_document_status_requires_change_note(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    ingestion_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nA responsabilidade civil depende dos pressupostos legais.",
+        ),
+        SourcePolicy.from_file(POLICY_PATH),
+        repository,
+    )
+    job = repository.get_job(ingestion_response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        response = client.post(
+            f"/admin/documents/{job.document_id}/status",
+            json={"target_status": "rejected"},
+            headers=ADMIN_HEADERS,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "change_note is required."
+
+
+def test_admin_document_status_returns_conflict_when_chat_ready_is_blocked(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    ingestion_response = ingest_source(
+        IngestionSourceRequest(source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        SourcePolicy.from_file(POLICY_PATH),
+        repository,
+    )
+    job = repository.get_job(ingestion_response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        response = client.post(
+            f"/admin/documents/{job.document_id}/status",
+            json={"target_status": "chat_ready", "change_note": "Approved during legal review."},
+            headers=ADMIN_HEADERS,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["detail"]["message"] == "Document cannot be promoted to chat_ready."
+    assert "Document has no persisted chunks." in payload["detail"]["blockers"]
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "pending_review"
+
+
+def test_admin_document_status_promotes_case_law_after_human_review(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    ingestion_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://www.dgsi.pt/jstj.nsf/example",
+            document_type="case_law",
+            raw_text="Acórdão sobre responsabilidade civil no processo 123/20.0T8LSB.",
+            legal_metadata={
+                "court": "Supremo Tribunal de Justiça",
+                "decision_date": "2024-01-01",
+                "process_number": "123/20.0T8LSB",
+            },
+        ),
+        SourcePolicy.from_file(POLICY_PATH),
+        repository,
+    )
+    job = repository.get_job(ingestion_response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        response = client.post(
+            f"/admin/documents/{job.document_id}/status",
+            json={"target_status": "chat_ready", "change_note": "Approved during human legal review."},
+            headers=ADMIN_HEADERS,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["document"]["status"] == "chat_ready"
+    assert payload["document"]["change_note"] == "Approved during human legal review."
+
+
+def test_admin_document_review_queue_lists_pending_documents_with_blockers(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    source_policy = SourcePolicy.from_file(POLICY_PATH)
+    blocked_response = ingest_source(
+        IngestionSourceRequest(source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        source_policy,
+        repository,
+    )
+    ready_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://www.dgsi.pt/jstj.nsf/example",
+            document_type="case_law",
+            raw_text="Acórdão sobre responsabilidade civil no processo 123/20.0T8LSB.",
+            legal_metadata={
+                "court": "Supremo Tribunal de Justiça",
+                "decision_date": "2024-01-01",
+                "process_number": "123/20.0T8LSB",
+            },
+        ),
+        source_policy,
+        repository,
+    )
+    chat_ready_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX:32016R0679",
+            document_type="legislation",
+            raw_text="Artigo 1.º\nTexto europeu com identificador CELEX:32016R0679.",
+            legal_metadata={"CELEX": "32016R0679"},
+            promote_if_valid=True,
+        ),
+        source_policy,
+        repository,
+    )
+    blocked_job = repository.get_job(blocked_response.job_id)
+    ready_job = repository.get_job(ready_response.job_id)
+    chat_ready_job = repository.get_job(chat_ready_response.job_id)
+    assert blocked_job is not None
+    assert blocked_job.document_id is not None
+    assert ready_job is not None
+    assert ready_job.document_id is not None
+    assert chat_ready_job is not None
+    assert chat_ready_job.document_id is not None
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        response = client.get("/admin/documents/review-queue", headers=ADMIN_HEADERS)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 2
+    items_by_id = {item["document"]["id"]: item for item in payload["items"]}
+    assert chat_ready_job.document_id not in items_by_id
+    assert items_by_id[blocked_job.document_id]["can_promote_to_chat_ready"] is False
+    assert "Document has no persisted chunks." in items_by_id[blocked_job.document_id]["promotion_blockers"]
+    assert items_by_id[ready_job.document_id]["can_promote_to_chat_ready"] is True
+    assert items_by_id[ready_job.document_id]["promotion_blockers"] == []
+
+
 def test_chat_answer_endpoint_abstains_without_evidence(tmp_path):
     repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
     app.dependency_overrides[get_repository] = lambda: repository
@@ -664,6 +818,7 @@ def test_openapi_smoke_includes_chat_and_admin_endpoints():
     paths = payload["paths"]
     assert "/chat/answer" in paths
     assert "/admin/documents" in paths
+    assert "/admin/documents/review-queue" in paths
     assert "/admin/documents/{document_id}" in paths
     assert "/admin/documents/{document_id}/chunks" in paths
     assert "/admin/documents/{document_id}/raw-text" in paths

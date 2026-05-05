@@ -17,9 +17,12 @@ legal-db-backup = "app.database_ops:backup_main"
 legal-db-migrate = "app.database_ops:migrate_main"
 legal-db-restore = "app.database_ops:restore_main"
 legal-eval = "app.evaluate:main"
+legal-ingestion-jobs = "app.ingestion_jobs:main"
 legal-n8n-validate = "app.n8n_workflows:main"
 legal-readiness = "app.readiness:main"
+legal-review-queue = "app.review_queue:main"
 legal-seed = "app.seed:main"
+legal-smoke = "app.smoke:main"
 
 [build-system]
 requires = ["hatchling"]

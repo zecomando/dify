@@ -38,8 +38,11 @@ from app.repository import (
     LegalRepository,
     utc_now_iso,
 )
+from app.review_queue import chat_ready_promotion_blockers, list_review_queue
 from app.schemas import (
     AdminDiagnosticsResponse,
+    AdminDocumentReviewQueueItem,
+    AdminDocumentReviewQueueResponse,
     AdminDocumentStatusRequest,
     AdminDocumentStatusResponse,
     AdminMetricsResponse,
@@ -434,6 +437,42 @@ def list_legal_documents(
     )
 
 
+@router.get(
+    "/admin/documents/review-queue",
+    response_model=AdminDocumentReviewQueueResponse,
+    dependencies=admin_dependencies,
+)
+def list_legal_document_review_queue(
+    source: str | None = None,
+    jurisdiction: str | None = None,
+    document_type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    source_policy: SourcePolicy = Depends(get_source_policy),
+    repository: LegalRepository = Depends(get_repository),
+) -> AdminDocumentReviewQueueResponse:
+    result = list_review_queue(
+        repository,
+        source_policy,
+        source=source,
+        jurisdiction=jurisdiction,
+        document_type=document_type,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminDocumentReviewQueueResponse(
+        items=[
+            AdminDocumentReviewQueueItem(
+                document=_legal_document_to_response(item.document),
+                can_promote_to_chat_ready=item.can_promote_to_chat_ready,
+                promotion_blockers=list(item.promotion_blockers),
+            )
+            for item in result.items
+        ],
+        total=result.total,
+    )
+
+
 @router.get("/admin/documents/{document_id}", response_model=LegalDocumentResponse, dependencies=admin_dependencies)
 def get_legal_document(
     document_id: str,
@@ -493,6 +532,18 @@ def update_legal_document_status(
     source_policy: SourcePolicy = Depends(get_source_policy),
     repository: LegalRepository = Depends(get_repository),
 ) -> AdminDocumentStatusResponse:
+    existing_document = repository.get_document(document_id)
+    if existing_document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    if not payload.change_note.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="change_note is required.")
+    if payload.target_status == DocumentStatus.CHAT_READY:
+        promotion_blockers = list(chat_ready_promotion_blockers(existing_document, repository, source_policy))
+        if promotion_blockers:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"message": "Document cannot be promoted to chat_ready.", "blockers": promotion_blockers},
+            )
     response = promote_document(
         PromoteDocumentRequest(
             document_id=document_id,

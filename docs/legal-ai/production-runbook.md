@@ -330,6 +330,7 @@ Ação:
 ### Diária
 
 - Verificar jobs de ingestão.
+- Em operação local sem FastAPI, usar `legal-ingestion-jobs --status rejected --json` para rever erros e documentos associados.
 - Verificar custos.
 - Verificar alertas.
 - Verificar falhas de validação.
@@ -339,6 +340,10 @@ Ação:
 - Executar evaluation suite.
 - Rever feedback negativo.
 - Rever documentos em `pending_review`.
+- Usar `/admin/documents/review-queue` para priorizar documentos sem blockers.
+- Em operação local sem FastAPI, usar `legal-review-queue` ou `legal-review-queue --json`.
+- Aprovar, rejeitar ou arquivar documentos via `/admin/documents/{document_id}/status` com `change_note` auditável.
+- Investigar blockers `409` antes de nova tentativa de promoção para `chat_ready`.
 - Rever fontes com alterações.
 
 ### Mensal

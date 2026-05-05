@@ -19,6 +19,8 @@ O `legal-engine-api` já cobre a demo técnica local:
 - Auditoria completa.
 - Evaluation suite mínima com quality gate verde.
 - Dify workflow importável.
+- Estratégia de UI versionada em `adr/0004-ui-strategy.md`.
+- UX Dify mínima para piloto com fontes, avisos, confiança operacional, `audit_id` e feedback.
 - Admin API para documentos, chunks, auditorias, evaluations, seed, reindex e jobs.
 
 Principais gaps para beta:
@@ -27,8 +29,8 @@ Principais gaps para beta:
 - Providers externos de embeddings, vector store e rerank.
 - Hardening de migrations PostgreSQL para produção.
 - n8n workflows exportáveis.
-- UI admin mínima.
-- UI/admin mínima para feedback do utilizador.
+- Validação do workflow Dify no ambiente alvo.
+- UI própria/admin mínima quando a beta validar necessidade de produto robusto.
 - Corpus real ampliado e avaliação expandida.
 
 ## Próximo sprint técnico
@@ -99,7 +101,7 @@ Critério de saída:
 - Executar `legal-db-migrate` na base persistente do ambiente.
 - Semear corpus inicial.
 - Importar Dify workflow.
-- Executar smoke via `legal-demo`, Dify e `/admin/evaluation/run`.
+- Executar smoke via `legal-smoke`, Dify e `/admin/evaluation/run`.
 - Ativar n8n seed smoke e evaluation run.
 - Produzir relatório de smoke com `audit_id` e `evaluation_run_id`.
 
@@ -109,14 +111,14 @@ Critério de saída:
 - Implementar fetch/parsing EUR-Lex inicial.
 - Criar lista de diplomas/CELEX monitorizados.
 - Adicionar n8n Manual URL ingestion.
-- Validar que documentos reais entram em `pending_review` ou `chat_ready` conforme policy.
+- Validar que legislação oficial pode entrar em `chat_ready` conforme policy e que jurisprudência crawled fica em `pending_review`.
 - Adicionar testes de regressão para parsing e metadados.
 
 ### Dia 3 — Retrieval beta e revisão humana
 
 - Adicionar embeddings/vector store em ambiente staging.
 - Implementar retrieval híbrido.
-- Criar fila/processo de revisão humana para jurisprudência.
+- Criar fila/processo de revisão humana para promover/rejeitar jurisprudência em `pending_review`.
 - Adicionar endpoint ou fluxo de rejeição com motivo.
 - Validar 50 perguntas canónicas.
 - Abrir UI/admin mínima ou runbook operacional para revisão.

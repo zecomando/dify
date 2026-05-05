@@ -169,7 +169,7 @@ O backlog abaixo distingue:
 
 **Objetivo:** disponibilizar chat funcional.
 
-**Estado local:** workflow importável em `docs/legal-ai/dify-chat-answer.yml` apontado para `POST /chat/answer`, com perguntas sugeridas alinhadas ao corpus inicial e documentação de smoke em `dify-workflow.md`. A demo local canónica é validada primeiro por `legal-demo`, antes de depender da UI do Dify.
+**Estado local:** workflow importável em `docs/legal-ai/dify-chat-answer.yml` apontado para `POST /chat/answer`, com perguntas sugeridas alinhadas ao corpus inicial, UX jurídica mínima para piloto, documentação de smoke em `dify-workflow.md` e estratégia de UI versionada em `docs/legal-ai/adr/0004-ui-strategy.md`. A demo local canónica é validada primeiro por `legal-smoke`, antes de depender da UI do Dify.
 
 **Concluído localmente:**
 
@@ -177,15 +177,18 @@ O backlog abaixo distingue:
 - Apontar workflow para `POST /chat/answer`.
 - Documentar smoke local antes da demo Dify.
 - Alinhar perguntas sugeridas com corpus inicial.
+- Comparar Dify, LibreChat, Open WebUI, AnythingLLM e UI própria em ADR versionada.
+- Mostrar resposta validada, abstenção segura ou bloqueio do validador em secções estáveis.
+- Mostrar fontes, versão, identificadores jurídicos, avisos, confiança operacional e instrução de feedback por `audit_id`.
 
 **Pendente beta/produção:**
 
 - Criar app Dify no ambiente alvo.
 - Configurar base URL do `legal-engine-api` no ambiente alvo.
 - Validar branch de resposta validada e branch de abstenção no Dify.
-- Mostrar fontes, confiança, `audit_id` e avisos de consolidação.
 - Documentar variáveis por ambiente.
 - Validar workflow após deploy de staging.
+- Iniciar UI própria apenas se a beta exigir admin/revisão, histórico, roles, multi-tenant ou UX jurídica dedicada.
 
 **Critério de aceitação:** utilizador recebe resposta final ou abstenção com auditoria associada.
 
@@ -216,16 +219,15 @@ O backlog abaixo distingue:
 
 ### P1.1 — Jurisprudência selecionada
 
-**Estado local:** seeds demonstrativos oficiais existem para DGSI, Tribunal Constitucional, Curia/TJUE e HUDOC/TEDH, com metadados mínimos exigidos pela source policy. Ainda não há ingestão remota, seleção editorial nem fila de revisão humana.
+**Estado local:** seeds demonstrativos oficiais existem para DGSI, Tribunal Constitucional, Curia/TJUE e HUDOC/TEDH, com metadados mínimos exigidos pela source policy. O crawl remoto já extrai metadados mínimos para estas fontes e mantém jurisprudência em `pending_review` até promoção explícita após revisão humana. Ainda faltam seleção editorial, UI/fila operacional de revisão e listas reais prioritárias.
 
 **Próximas tarefas:**
 
 - Definir lista inicial de 300–500 decisões por área prioritária.
 - Criar critérios editoriais: tribunal, data, tema, relevância, estabilidade jurisprudencial.
-- Implementar ingestão manual/aprovada para DGSI, Tribunal Constitucional, Curia e HUDOC.
-- Exigir metadados mínimos antes de `pending_review`.
-- Criar endpoint/fluxo de aprovação humana para promoção a `chat_ready`.
-- Adicionar testes de preservação de processo, ECLI, tribunal, data e URL oficial.
+- Definir fluxo operacional de aprovação/rejeição para promoção a `chat_ready`.
+- Adicionar fila/UI para revisão humana sem acesso direto à base de dados.
+- Expandir testes de preservação de ECLI e número de acórdão quando estes campos estiverem disponíveis no HTML real.
 
 ### P1.2 — n8n automations
 
@@ -241,16 +243,16 @@ O backlog abaixo distingue:
 
 ### P1.3 — Admin mínimo
 
-**Estado local:** Admin API protegido por `X-Admin-Token` já permite listar documentos, consultar documento/chunks, promover status com validação da source policy, listar/consultar auditorias, correr/listar avaliações, seedar corpus, reindexar e consultar jobs.
+**Estado local:** Admin API protegido por `X-Admin-Token` já permite listar documentos, consultar fila de revisão com blockers de promoção, consultar documento/chunks/texto bruto, promover/rejeitar/arquivar status com `change_note` obrigatório, validação da source policy e blockers explícitos para `chat_ready`, listar/consultar auditorias, correr/listar avaliações, seedar corpus, reindexar e consultar jobs. Operadores locais também conseguem usar `legal-review-queue` e `legal-ingestion-jobs` sem iniciar FastAPI.
 
 **Próximas tarefas:**
 
-- Criar UI admin mínima ou páginas internas Dify/console.
-- Adicionar ação explícita de rejeição com motivo.
+- Criar UI admin mínima ou páginas internas Dify/console sobre a fila `/admin/documents/review-queue`.
 - Adicionar ação de arquivar versão e manter cadeia temporal.
 - Adicionar filtros por source, jurisdição, status, tipo documental e datas.
-- Adicionar visualização de job error messages e documento associado.
+- Adicionar visualização UI de job error messages e documento associado; o CLI local já cobre esta consulta operacional.
 - Restringir acesso admin por ambiente/role.
+- Seguir a decisão de `docs/legal-ai/adr/0004-ui-strategy.md`: Dify não deve tornar-se admin canónico de produção se forem necessários workflows de revisão robustos.
 
 ### P1.4 — Evaluation suite
 

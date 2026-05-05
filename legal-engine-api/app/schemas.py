@@ -291,6 +291,21 @@ class LegalDocumentListResponse(BaseModel):
     total: int
 
 
+class AdminDocumentReviewQueueItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document: LegalDocumentResponse
+    can_promote_to_chat_ready: bool
+    promotion_blockers: list[str]
+
+
+class AdminDocumentReviewQueueResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AdminDocumentReviewQueueItem]
+    total: int
+
+
 class LegalChunkResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

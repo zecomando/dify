@@ -99,6 +99,75 @@ def test_ingest_source_promotes_valid_document_when_requested(tmp_path: Path):
     assert document.status == "chat_ready"
 
 
+def test_ingest_source_reuses_current_document_when_hash_is_unchanged(tmp_path: Path):
+    repository = _repository(tmp_path)
+    payload = IngestionSourceRequest(
+        source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+        raw_text="Artigo 1.º\nTexto oficial.",
+        promote_if_valid=True,
+    )
+
+    first_response = ingest_source(payload, _source_policy(), repository)
+    second_response = ingest_source(payload, _source_policy(), repository)
+
+    first_job = repository.get_job(first_response.job_id)
+    second_job = repository.get_job(second_response.job_id)
+    assert first_job is not None
+    assert second_job is not None
+    assert first_job.document_id is not None
+    assert second_job.document_id == first_job.document_id
+    assert repository.count_documents() == 1
+
+
+def test_ingest_source_archives_current_version_when_hash_changes(tmp_path: Path):
+    repository = _repository(tmp_path)
+    source_url = "https://dre.pt/dre/legislacao-consolidada/codigo-civil"
+    first_response = ingest_source(
+        IngestionSourceRequest(
+            source_url=source_url,
+            raw_text="Artigo 1.º\nTexto inicial.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+    first_job = repository.get_job(first_response.job_id)
+    assert first_job is not None
+    assert first_job.document_id is not None
+    first_document = repository.get_document(first_job.document_id)
+    assert first_document is not None
+
+    second_response = ingest_source(
+        IngestionSourceRequest(
+            source_url=source_url,
+            raw_text="Artigo 1.º\nTexto atualizado.",
+            valid_from="2026-01-01",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+
+    second_job = repository.get_job(second_response.job_id)
+    archived_document = repository.get_document(first_document.id)
+    assert second_job is not None
+    assert second_job.document_id is not None
+    second_document = repository.get_document(second_job.document_id)
+    assert archived_document is not None
+    assert second_document is not None
+    assert second_document.id != first_document.id
+    assert second_document.supersedes_document_id == first_document.id
+    assert second_document.is_current is True
+    assert second_document.sha256 != first_document.sha256
+    assert archived_document.status == "archived"
+    assert archived_document.is_current is False
+    assert archived_document.valid_until == "2026-01-01"
+    assert archived_document.archived_at is not None
+    assert repository.get_document_by_source_url(source_url).id == second_document.id
+    assert repository.count_documents() == 2
+    assert repository.list_chunks_by_document(first_document.id)
+
+
 def test_ingest_source_rejects_non_authoritative_source_without_document(tmp_path: Path):
     repository = _repository(tmp_path)
 
@@ -399,11 +468,50 @@ def test_crawl_url_fetches_and_ingests_dgsi_case_law_with_required_metadata(tmp_
     document = repository.get_document(job.document_id)
     assert document is not None
     assert document.source == "DGSI"
-    assert document.status == "chat_ready"
+    assert document.status == "pending_review"
     assert document.document_type == "case_law"
     assert document.legal_metadata["court"] == "Supremo Tribunal de Justiça"
     assert document.legal_metadata["process_number"] == "123/20.0T8LSB.L1.S1"
     assert document.legal_metadata["decision_date"] == "2024-01-11"
+
+
+def test_crawl_url_case_law_can_be_promoted_after_human_review(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.dgsi.pt/jstj.nsf/954f0ce6ad9dd8b980256b5f003fa814/example"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Supremo Tribunal de Justiça</h1>
+            <p>Tribunal: Supremo Tribunal de Justiça</p>
+            <p>Processo: 123/20.0T8LSB.L1.S1</p>
+            <p>Data do Acórdão: 2024-01-11</p>
+            <p>Responsabilidade civil extracontratual.</p>
+            </body></html>
+            """
+        ),
+    )
+    job = repository.get_job(response.job_id)
+    assert job is not None
+    assert job.document_id is not None
+
+    promoted = promote_document(
+        PromoteDocumentRequest(
+            document_id=job.document_id,
+            change_note="Approved during human legal review.",
+        ),
+        repository,
+        _source_policy(),
+    )
+
+    assert promoted is not None
+    assert promoted.status == "chat_ready"
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "chat_ready"
+    assert document.change_note == "Approved during human legal review."
 
 
 def test_crawl_url_fetches_and_ingests_csm_case_law_with_required_metadata(tmp_path: Path):
@@ -432,7 +540,7 @@ def test_crawl_url_fetches_and_ingests_csm_case_law_with_required_metadata(tmp_p
     document = repository.get_document(job.document_id)
     assert document is not None
     assert document.source == "CSM_JURISPRUDENCE"
-    assert document.status == "chat_ready"
+    assert document.status == "pending_review"
     assert document.document_type == "case_law"
     assert document.area == ("civil",)
     assert document.legal_metadata["court"] == "Tribunal da Relação de Lisboa"
@@ -470,7 +578,7 @@ def test_crawl_url_fetches_and_ingests_tribunal_constitucional_case_law(tmp_path
     document = repository.get_document(job.document_id)
     assert document is not None
     assert document.source == "TRIBUNAL_CONSTITUCIONAL"
-    assert document.status == "chat_ready"
+    assert document.status == "pending_review"
     assert document.document_type == "case_law"
     assert document.area == ("constitucional",)
     assert document.legal_metadata["court"] == "Tribunal Constitucional"
@@ -504,7 +612,7 @@ def test_crawl_url_fetches_and_ingests_curia_case_law(tmp_path: Path):
     document = repository.get_document(job.document_id)
     assert document is not None
     assert document.source == "CURIA"
-    assert document.status == "chat_ready"
+    assert document.status == "pending_review"
     assert document.document_type == "case_law"
     assert document.legal_metadata["court"] == "Court of Justice"
     assert document.legal_metadata["case_number"] == "C-311/18"
@@ -537,7 +645,7 @@ def test_crawl_url_fetches_and_ingests_infocuria_case_law(tmp_path: Path):
     document = repository.get_document(job.document_id)
     assert document is not None
     assert document.source == "INFOCURIA"
-    assert document.status == "chat_ready"
+    assert document.status == "pending_review"
     assert document.document_type == "case_law"
     assert document.area == ("contratacao_publica",)
     assert document.legal_metadata["court"] == "General Court"
@@ -575,7 +683,7 @@ def test_crawl_url_fetches_and_ingests_hudoc_case_law(tmp_path: Path):
     document = repository.get_document(job.document_id)
     assert document is not None
     assert document.source == "HUDOC"
-    assert document.status == "chat_ready"
+    assert document.status == "pending_review"
     assert document.document_type == "case_law"
     assert document.legal_metadata["court"] == "European Court of Human Rights"
     assert document.legal_metadata["application_number"] == "12345/20"

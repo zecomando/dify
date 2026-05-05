@@ -53,6 +53,13 @@ uv run --project legal-engine-api legal-eval
 uv run --project legal-engine-api legal-demo
 ```
 
+// turbo
+6. Run traceable local/staging smoke report:
+
+```powershell
+uv run --project legal-engine-api legal-smoke --json
+```
+
 ## PostgreSQL local-first variant
 
 Use this variant before moving to cloud or hosted servers.
@@ -74,6 +81,7 @@ uv run --project legal-engine-api legal-db-migrate --database-url $env:LEGAL_ENG
 uv run --project legal-engine-api legal-seed --database-url $env:LEGAL_ENGINE_DATABASE_URL --json
 uv run --project legal-engine-api legal-demo --database-url $env:LEGAL_ENGINE_DATABASE_URL
 uv run --project legal-engine-api legal-eval --database-url $env:LEGAL_ENGINE_DATABASE_URL
+uv run --project legal-engine-api legal-smoke --database-url $env:LEGAL_ENGINE_DATABASE_URL --json
 uv run --project legal-engine-api legal-readiness --database-url $env:LEGAL_ENGINE_DATABASE_URL --require-admin-token
 ```
 
@@ -96,19 +104,19 @@ uv run --project legal-engine-api legal-db-restore `
 
 Only run these after `legal-engine-api` is already running and reachable at `LEGAL_ENGINE_BASE_URL`.
 
-6. Confirm health:
+7. Confirm health:
 
 ```powershell
 Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/health" -Method Get
 ```
 
-7. Seed the initial corpus through the admin API:
+8. Seed the initial corpus through the admin API:
 
 ```powershell
 Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/corpus/seed" -Method Post -Headers @{ "X-Admin-Token" = $env:LEGAL_ENGINE_ADMIN_TOKEN }
 ```
 
-8. Ask an answerable canonical question:
+9. Ask an answerable canonical question:
 
 ```powershell
 $answerJson = @{ question = "Quais sao os pressupostos da responsabilidade civil extracontratual?" } | ConvertTo-Json -Compress
@@ -116,19 +124,19 @@ $answerBytes = [System.Text.Encoding]::UTF8.GetBytes($answerJson)
 Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/chat/answer" -Method Post -ContentType "application/json; charset=utf-8" -Body $answerBytes
 ```
 
-9. Confirm documents are visible to admin:
+10. Confirm documents are visible to admin:
 
 ```powershell
 Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/documents" -Method Get -Headers @{ "X-Admin-Token" = $env:LEGAL_ENGINE_ADMIN_TOKEN }
 ```
 
-10. Confirm ingestion jobs are visible to admin:
+11. Confirm ingestion jobs are visible to admin:
 
 ```powershell
 Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/ingestion/jobs" -Method Get -Headers @{ "X-Admin-Token" = $env:LEGAL_ENGINE_ADMIN_TOKEN }
 ```
 
-11. Run the persisted evaluation through the admin API:
+12. Run the persisted evaluation through the admin API:
 
 ```powershell
 $evalBytes = [System.Text.Encoding]::UTF8.GetBytes("{}")
@@ -137,9 +145,9 @@ Invoke-RestMethod -Uri "$env:LEGAL_ENGINE_BASE_URL/admin/evaluation/run" -Method
 
 ## Dify smoke
 
-12. Import `docs/legal-ai/dify-chat-answer.yml` into Dify.
-13. Configure the HTTP node to call `POST $env:LEGAL_ENGINE_BASE_URL/chat/answer` or the equivalent URL reachable from the Dify runtime.
-14. Ask the three canonical smoke questions:
+13. Import `docs/legal-ai/dify-chat-answer.yml` into Dify.
+14. Configure the HTTP node to call `POST $env:LEGAL_ENGINE_BASE_URL/chat/answer` or the equivalent URL reachable from the Dify runtime.
+15. Ask the three canonical smoke questions:
 
 ```text
 Quais são os pressupostos da responsabilidade civil extracontratual?
@@ -153,7 +161,7 @@ No RGPD da União Europeia, quais são as bases de licitude para tratamento de d
 Qual é a orientação dominante sobre uma questão jurídica local sem corpus indexado?
 ```
 
-15. Record the following evidence for the smoke report:
+16. Record the following evidence for the smoke report:
 
 - `audit_id` for each Dify/API answer.
 - `evaluation_run_id` from `/admin/evaluation/run`.
@@ -163,6 +171,7 @@ Qual é a orientação dominante sobre uma questão jurídica local sem corpus i
 ## Pass criteria
 
 - Tests, lint, format check, `legal-eval`, and `legal-demo` pass.
+- `legal-smoke` returns `passed=true` with chat `audit_id` values and a persisted `evaluation_run_id`.
 - Health endpoint responds successfully.
 - Corpus seed reports zero unexpected rejected jobs.
 - API answerable question returns `pass` with evidence and `audit_id`.

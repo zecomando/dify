@@ -9,7 +9,7 @@ Criar um pipeline fiável para transformar fontes oficiais em documentos, chunks
 O `legal-engine-api` já implementa a ingestão local determinística necessária para demo técnica:
 
 - `POST /ingestion/source` aceita URL oficial, texto bruto opcional, metadados jurídicos e flag de promoção.
-- `POST /ingestion/crawl-url` faz fetch HTTP inicial para DRE/EUR-Lex, normaliza HTML/texto, extrai metadados básicos e cria documento/job.
+- `POST /ingestion/crawl-url` faz fetch HTTP inicial para DRE/EUR-Lex e jurisprudência oficial suportada, normaliza HTML/texto, extrai metadados básicos e cria documento/job.
 - `legal-seed` e `POST /admin/corpus/seed` criam um corpus inicial oficial e idempotente por `source_url`.
 - O texto bruto é persistido quando fornecido.
 - O SHA-256 é calculado a partir da URL e do texto bruto.
@@ -26,7 +26,7 @@ Ainda não implementado:
 - Extração automática completa de metadados jurídicos.
 - Hardening de embeddings externos e vector store de produção.
 - Arquivo automático de versões anteriores.
-- Fila de aprovação humana para jurisprudência e fontes sensíveis.
+- UI/fila operacional dedicada para aprovação humana de jurisprudência e fontes sensíveis.
 
 ## Princípios
 
@@ -97,7 +97,7 @@ Promoção para chat_ready ou pending_review
 2. **Parser robusto por fonte**
    - DRE: HTML consolidado simples já entra como texto/artigos; falta parsing estrutural completo.
    - EUR-Lex: CELEX e tipo de ato básico já são extraídos; faltam anexos, ELI e versões consolidadas robustas.
-   - HUDOC/Curia/DGSI: metadados mínimos e corpo decisório apenas com aprovação humana.
+   - DGSI/CSM/Tribunal Constitucional/Curia/InfoCuria/HUDOC: metadados mínimos são extraídos e o documento fica em `pending_review` até aprovação humana.
 
 3. **Hardening de embeddings e vector store**
    - `EmbeddingProvider` local determinístico e índice SQLite já existem.
@@ -111,8 +111,8 @@ Promoção para chat_ready ou pending_review
    - Preservar cadeia de alteração para perguntas “à data de”.
 
 5. **Revisão humana**
-   - Jurisprudência começa sempre em `pending_review`.
-   - Promoção exige metadados mínimos, fonte oficial e aprovação.
+   - Jurisprudência crawled começa sempre em `pending_review`, mesmo quando os metadados mínimos foram extraídos.
+   - Promoção para `chat_ready` exige metadados mínimos, fonte oficial e aprovação explícita via fluxo/admin.
    - Rejeição deve guardar motivo auditável.
 
 ## Estados
@@ -243,6 +243,7 @@ Ingerir acórdãos relevantes para constitucionalidade e direitos fundamentais.
 - Preservar processo.
 - Preservar data.
 - Preservar tipo de fiscalização, quando possível.
+- Exigir aprovação humana no MVP antes de fundamentar respostas.
 
 ## Curia / InfoCuria
 
@@ -265,6 +266,7 @@ Ingerir jurisprudência do TJUE.
 - Preservar número de processo.
 - Preservar ECLI quando disponível.
 - Separar conclusões do Advogado-Geral de acórdãos.
+- Exigir aprovação humana no MVP antes de fundamentar respostas.
 
 ## HUDOC / TEDH
 
@@ -281,6 +283,10 @@ Ingerir jurisprudência CEDH/TEDH relevante.
 - Importance level.
 - Articles ECHR.
 - URL oficial.
+
+### Regras — HUDOC / TEDH
+
+- Exigir aprovação humana no MVP antes de fundamentar respostas.
 
 ## BASE / IMPIC
 
@@ -337,16 +343,16 @@ Para beta/produção, acrescentar:
 - Chunks indexados no vector store externo.
 - `vector_id` externo persistido por chunk.
 - Avisos de consolidação/vigência presentes quando aplicável.
-- Jurisprudência aprovada por humano quando a source policy ou critérios editoriais exigirem.
+- Jurisprudência aprovada por humano antes de entrar em `chat_ready`.
 
 ## Critérios por fonte antes de `chat_ready`
 
 - **DRE:** artigo ou identificador legal preservado; vigência/consolidação marcada; aviso de texto consolidado quando aplicável.
 - **EUR-Lex:** CELEX preservado; tipo de ato correto; versão consolidada marcada quando aplicável.
 - **DGSI:** tribunal, data e processo presentes; decisão selecionada por critério editorial; aprovação humana.
-- **Tribunal Constitucional:** número de acórdão/processo e data presentes.
-- **Curia/TJUE:** tribunal, data, número de processo e ECLI quando disponível.
-- **HUDOC/TEDH:** application number, court e decision date presentes.
+- **Tribunal Constitucional:** número de acórdão/processo e data presentes; aprovação humana.
+- **Curia/TJUE:** tribunal, data, número de processo e ECLI quando disponível; aprovação humana.
+- **HUDOC/TEDH:** application number, court e decision date presentes; aprovação humana.
 - **BASE/TED:** separar dado de contratação pública de conclusão jurídica; CPV/notice ID quando disponível.
 
 ## Reprocessamento

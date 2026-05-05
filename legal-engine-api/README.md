@@ -23,6 +23,7 @@ uv run --project legal-engine-api ruff check app tests
 uv run --project legal-engine-api ruff format --check app tests
 uv run --project legal-engine-api legal-seed
 uv run --project legal-engine-api legal-demo
+uv run --project legal-engine-api legal-smoke --json
 uv run --project legal-engine-api legal-n8n-validate
 uv run --project legal-engine-api legal-readiness --skip-eval
 uv run --project legal-engine-api uvicorn app.main:app --reload
@@ -69,6 +70,15 @@ uv run --project legal-engine-api legal-readiness --require-admin-token --databa
 
 The command checks schema initialization, source policy loading, optional admin token presence, seed, deterministic demo, and evaluation gates.
 
+Run a traceable local/staging smoke report when you need canonical `audit_id` values, a persisted `evaluation_run_id`, seed counts, and diagnostics in one output:
+
+```bash
+uv run --project legal-engine-api legal-smoke --json
+uv run --project legal-engine-api legal-smoke --database-url "$LEGAL_ENGINE_DATABASE_URL" --json
+```
+
+The smoke command seeds the corpus, runs the canonical chat cases, persists an evaluation run, and reports document/job/audit/evaluation counts without requiring paid providers.
+
 The readiness command also validates the exported n8n workflows under `docs/legal-ai/n8n`. You can run that gate independently:
 
 ```bash
@@ -109,6 +119,7 @@ Tests use an injected fake fetcher and do not call live official websites.
 - `POST /retrieval/search`
 - `POST /chat/answer`
 - `GET /admin/documents`
+- `GET /admin/documents/review-queue`
 - `GET /admin/documents/{document_id}`
 - `GET /admin/documents/{document_id}/chunks`
 - `POST /admin/documents/{document_id}/status`
@@ -120,6 +131,26 @@ Tests use an injected fake fetcher and do not call live official websites.
 - `POST /admin/evaluation/run`
 - `GET /admin/evaluation/runs`
 - `GET /admin/evaluation/runs/{run_id}`
+
+`GET /admin/documents/review-queue` lists `pending_review` documents with `promotion_blockers` and `can_promote_to_chat_ready`. `POST /admin/documents/{document_id}/status` is the local operational review gate. It requires a non-empty `change_note`, returns `409` with explicit blockers when `chat_ready` is blocked by missing chunks or source-policy requirements, and persists the review note when approving, rejecting, or archiving a document.
+
+The same review queue can be inspected locally without starting FastAPI:
+
+```bash
+uv run --project legal-engine-api legal-review-queue
+uv run --project legal-engine-api legal-review-queue --json
+```
+
+Use `--source`, `--jurisdiction`, `--document-type`, `--limit`, and `--offset` to narrow the operational queue.
+
+Ingestion jobs can also be inspected locally with errors and linked documents:
+
+```bash
+uv run --project legal-engine-api legal-ingestion-jobs
+uv run --project legal-engine-api legal-ingestion-jobs --status rejected --json
+```
+
+Use `--status`, `--mode`, `--source`, `--limit`, and `--offset` to investigate failed or pending ingestion work.
 
 ## Initial deterministic corpus
 

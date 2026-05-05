@@ -1,8 +1,8 @@
-# Arquitetura — Legal AI Chat pago/acelerado
+# Arquitetura — Legal AI Chat
 
 ## Princípio arquitetural
 
-A aplicação deve ser desenhada com adapters substituíveis. O MVP usa ferramentas pagas para acelerar qualidade e entrada no mercado, mas cada dependência externa deve estar atrás de uma interface própria.
+A aplicação deve ser desenhada com adapters substituíveis. O MVP mantém um caminho local-first e determinístico para desenvolvimento, testes e operação mínima; providers pagos ou cloud podem acelerar qualidade e escala, mas cada dependência externa deve estar atrás de uma interface própria.
 
 ## Arquitetura lógica
 
@@ -45,13 +45,17 @@ Normalizer jurídico
   ↓
 Chunker estrutural
   ↓
-OpenAI embeddings
+Embedding provider local ou OpenAI
   ↓
-Pinecone ou Qdrant Cloud
+Vector store local, Pinecone ou Qdrant Cloud
   ↓
-PostgreSQL metadata
+SQLite local / PostgreSQL metadata
   ↓
-chat_ready
+pending_review ou chat_ready
+  ↓
+Review Queue API/CLI
+  ↓
+promoção auditável para chat_ready
 ```
 
 ## Componentes
@@ -86,8 +90,9 @@ Responsável por:
 - Política de fontes.
 - Auditoria.
 - Ingestão e promoção de documentos.
+- Review queue administrativa com blockers de promoção.
 
-### PostgreSQL
+### SQLite local / PostgreSQL
 
 Guarda:
 
@@ -99,9 +104,9 @@ Guarda:
 - Runs de avaliação.
 - Políticas versionadas.
 
-### Pinecone / Qdrant Cloud
+### Vector store local / Pinecone / Qdrant Cloud
 
-Guarda vetores e metadados indexáveis.
+Guarda vetores e metadados indexáveis. O MVP local mantém um caminho determinístico sem cloud; Pinecone ou Qdrant Cloud são adapters de escala.
 
 Índices recomendados:
 
@@ -123,6 +128,10 @@ Usado para transformar URLs oficiais em Markdown limpo.
 ### Docling
 
 Usado para parsing de PDFs, DOCX, HTML complexo e conversão estruturada.
+
+### Embedding provider
+
+O MVP local pode usar embeddings determinísticos para testes e operação mínima.
 
 ### OpenAI embeddings
 
@@ -220,6 +229,16 @@ SourcePolicy
 10. Indexar.
 11. Validar qualidade.
 12. Promover para `chat_ready` ou enviar para revisão.
+
+## Fluxo de revisão humana
+
+1. Documento entra em `pending_review` quando exige aprovação explícita ou falha alguma condição de promoção automática.
+2. Operador consulta `GET /admin/documents/review-queue` ou `legal-review-queue`.
+3. A fila calcula `promotion_blockers` com a mesma lógica usada pela promoção para `chat_ready`.
+4. Legal reviewer consulta documento, chunks e texto bruto via Admin API quando necessário.
+5. Data owner aprova, rejeita ou arquiva via `POST /admin/documents/{document_id}/status`.
+6. Cada decisão exige `change_note` não vazio e fica refletida no documento.
+7. Promoção bloqueada devolve blockers explícitos para correção antes de nova tentativa.
 
 ## Boundary de confiança
 

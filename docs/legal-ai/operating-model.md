@@ -94,10 +94,13 @@ Responsável por:
 ## Processo de aprovação de fontes
 
 1. Fonte entra como `pending_review`.
-2. Sistema valida domínio e metadados.
-3. Legal reviewer aprova ou rejeita.
-4. Data owner promove para `chat_ready`.
-5. Auditoria regista decisão.
+2. Operador consulta `GET /admin/documents/review-queue` para ver blockers e documentos prontos para promoção.
+3. Sistema valida domínio, chunks e metadados.
+4. Legal reviewer consulta documento, chunks e texto bruto via Admin API.
+5. Data owner promove, rejeita ou arquiva via `POST /admin/documents/{document_id}/status`.
+6. O pedido exige `change_note` não vazio para registar a decisão.
+7. Promoção para `chat_ready` devolve `409` com blockers quando faltam chunks ou requisitos da source policy.
+8. Auditoria regista decisão no documento.
 
 ## Processo de incidente jurídico
 
