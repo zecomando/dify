@@ -44,12 +44,14 @@ Os workflows exportáveis ficam em `docs/legal-ai/n8n/`:
 - `manual-url-ingestion.json`: webhook interno para validar URL, executar `/ingestion/crawl-url` e consultar job.
 - `reindex-schedule.json`: schedule semanal para `/admin/reindex`, com filtros opcionais por ambiente.
 - `evaluation-run.json`: schedule diário para `/admin/evaluation/run` e validação de `passed=true`.
+- `ingestion-job-alerts.json`: schedule horário para consultar jobs `rejected` e falhar explicitamente quando existirem rejeições.
 
 Antes de importar:
 
 - Definir `LEGAL_ENGINE_BASE_URL`, por exemplo `http://legal-engine-api:8000`.
 - Definir `LEGAL_ENGINE_ADMIN_TOKEN` como segredo de ambiente do n8n.
 - Opcionalmente definir `LEGAL_ENGINE_REINDEX_SOURCE`, `LEGAL_ENGINE_REINDEX_JURISDICTION`, `LEGAL_ENGINE_REINDEX_DOCUMENT_IDS` e `LEGAL_ENGINE_EVALS_DIR`.
+- Opcionalmente definir `LEGAL_ENGINE_INGESTION_ALERT_LIMIT` entre 1 e 100 para limitar a amostra de jobs rejeitados.
 - Confirmar que o `legal-engine-api` está acessível a partir do runtime do n8n.
 
 Critério de importação:
@@ -293,7 +295,36 @@ O workflow pode chamar `POST /admin/evaluation/run` com `{}` para usar o dataset
 
 O run fica persistido, `passed=true` é exigido para deploy, e falhas geram alerta com lista dos casos regressivos.
 
-## Workflow 7 — Cost monitor
+## Workflow 7 — Ingestion job alerts
+
+### Frequência — Ingestion job alerts
+
+Horário em staging/beta, ajustável pelo operador.
+
+### Fluxo — Ingestion job alerts
+
+```text
+Cron
+  ↓
+Preparar limite operacional
+  ↓
+GET /admin/ingestion/jobs?status=rejected
+  ↓
+Se existirem jobs rejeitados:
+    lançar erro explícito com total e amostra
+Se não existirem:
+    devolver status passed
+```
+
+### Implementação atual
+
+O workflow exportável `ingestion-job-alerts.json` usa apenas `LEGAL_ENGINE_BASE_URL`, `LEGAL_ENGINE_ADMIN_TOKEN` e opcionalmente `LEGAL_ENGINE_INGESTION_ALERT_LIMIT`. Não contém credenciais embutidas e é validado por `legal-n8n-validate`.
+
+### Critério de sucesso
+
+Rejeições de ingestão ficam visíveis como falha operacional no n8n, com `job_id`, `source` e `error_message` suficientes para triagem pelo operador.
+
+## Workflow 8 — Cost monitor
 
 ### Frequência — Cost monitor
 

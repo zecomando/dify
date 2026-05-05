@@ -1,0 +1,126 @@
+{
+  "name": "Legal AI - Ingestion Job Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "hourly-schedule",
+      "name": "Hourly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const limit = Number($env.LEGAL_ENGINE_INGESTION_ALERT_LIMIT || 20);\nif (!Number.isInteger(limit) || limit < 1 || limit > 100) {\n  throw new Error('LEGAL_ENGINE_INGESTION_ALERT_LIMIT must be an integer between 1 and 100.');\n}\nreturn [{ json: { limit } }];"
+      },
+      "id": "prepare-alert-query",
+      "name": "Prepare Alert Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/ingestion/jobs?status=rejected&limit=' + $json.limit }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Token",
+              "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "list-rejected-ingestion-jobs",
+      "name": "List Rejected Ingestion Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst jobs = Array.isArray(response.jobs) ? response.jobs : Array.isArray(response.items) ? response.items : [];\nif (jobs.length > 0) {\n  const sample = jobs.slice(0, 5).map((job) => `${job.job_id || job.id || 'unknown'}:${job.source || 'unknown'}:${job.error_message || 'no error_message'}`).join('; ');\n  throw new Error(`Rejected ingestion jobs detected: total=${response.total || jobs.length}; sample=${sample}`);\n}\nreturn [{ json: { status: 'passed', rejected_jobs: 0, checked_limit: $('Prepare Alert Query').first().json.limit } }];"
+      },
+      "id": "validate-no-rejected-jobs",
+      "name": "Validate No Rejected Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Hourly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Query": {
+      "main": [
+        [
+          {
+            "node": "List Rejected Ingestion Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Rejected Ingestion Jobs": {
+      "main": [
+        [
+          {
+            "node": "Validate No Rejected Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon"
+  },
+  "pinData": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "legal-ai"
+    },
+    {
+      "name": "ingestion-alerts"
+    }
+  ],
+  "versionId": "legal-ai-ingestion-job-alerts-v1"
+}

@@ -13,6 +13,7 @@ def test_validate_n8n_workflows_accepts_exported_workflows_without_embedded_secr
     assert summary.passed is True
     assert {Path(result.path).name for result in summary.workflows} == {
         "evaluation-run.json",
+        "ingestion-job-alerts.json",
         "local-staging-seed-smoke.json",
         "manual-url-ingestion.json",
         "reindex-schedule.json",
