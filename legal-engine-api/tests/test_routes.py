@@ -596,6 +596,68 @@ def test_feedback_answer_endpoint_persists_feedback_and_admin_lists_it(tmp_path)
     assert filtered_response.json()["feedback"][0]["session_id"] == "session-feedback"
 
 
+def test_admin_feedback_triage_lists_negative_feedback_with_audit_context(tmp_path):
+    repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    try:
+        negative_answer_response = client.post(
+            "/chat/answer",
+            json={
+                "question": "responsabilidade civil",
+                "session_id": "session-triage",
+                "user_id": "user-triage",
+            },
+        )
+        positive_answer_response = client.post(
+            "/chat/answer",
+            json={"question": "contratação pública", "session_id": "session-ok", "user_id": "user-ok"},
+        )
+        assert negative_answer_response.status_code == 200
+        assert positive_answer_response.status_code == 200
+        negative_feedback_response = client.post(
+            "/feedback/answer",
+            json={
+                "audit_id": negative_answer_response.json()["audit_id"],
+                "rating": "negative",
+                "category": "legal_error",
+                "comment": "A resposta não tratou o regime aplicável.",
+                "session_id": "session-triage",
+                "user_id": "user-triage",
+            },
+        )
+        positive_feedback_response = client.post(
+            "/feedback/answer",
+            json={
+                "audit_id": positive_answer_response.json()["audit_id"],
+                "rating": "positive",
+                "session_id": "session-ok",
+                "user_id": "user-ok",
+            },
+        )
+        triage_response = client.get(
+            "/admin/feedback/triage",
+            params={"category": "legal_error", "session_id": "session-triage"},
+            headers=ADMIN_HEADERS,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert negative_feedback_response.status_code == 201
+    assert positive_feedback_response.status_code == 201
+    assert triage_response.status_code == 200
+    payload = triage_response.json()
+    assert payload["total"] == 1
+    item = payload["items"][0]
+    assert item["feedback"]["id"] == negative_feedback_response.json()["id"]
+    assert item["feedback"]["rating"] == "negative"
+    assert item["audit_id"] == negative_answer_response.json()["audit_id"]
+    assert item["user_query"] == "responsabilidade civil"
+    assert item["final_answer"]
+    assert item["verdict"] in {"pass", "abstain", "fail"}
+    assert item["evidence_count"] >= 0
+
+
 def test_feedback_answer_endpoint_returns_404_for_missing_audit(tmp_path):
     repository = LegalRepository(tmp_path / "legal-engine.sqlite3")
     app.dependency_overrides[get_repository] = lambda: repository
@@ -824,6 +886,7 @@ def test_openapi_smoke_includes_chat_and_admin_endpoints():
     assert "/admin/documents/{document_id}/raw-text" in paths
     assert "/admin/documents/{document_id}/status" in paths
     assert "/admin/audits" in paths
+    assert "/admin/feedback/triage" in paths
     assert "/admin/corpus/seed" in paths
     assert "/admin/ingestion/jobs" in paths
     assert "/admin/ingestion/jobs/{job_id}" in paths

@@ -125,6 +125,7 @@ Tests use an injected fake fetcher and do not call live official websites.
 - `POST /admin/documents/{document_id}/status`
 - `GET /admin/audits`
 - `GET /admin/audit/{answer_id}`
+- `GET /admin/feedback/triage`
 - `POST /admin/corpus/seed`
 - `GET /admin/ingestion/jobs`
 - `GET /admin/ingestion/jobs/{job_id}`
@@ -151,6 +152,15 @@ uv run --project legal-engine-api legal-ingestion-jobs --status rejected --json
 ```
 
 Use `--status`, `--mode`, `--source`, `--limit`, and `--offset` to investigate failed or pending ingestion work.
+
+Negative answer feedback can be triaged with answer audit context:
+
+```bash
+uv run --project legal-engine-api legal-feedback-triage
+uv run --project legal-engine-api legal-feedback-triage --category legal_error --json
+```
+
+Use `--category`, `--session-id`, `--user-id`, `--limit`, and `--offset` to prepare a focused legal review export without direct database access.
 
 ## Initial deterministic corpus
 

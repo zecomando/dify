@@ -93,13 +93,21 @@ def test_openapi_contract_includes_answer_feedback_endpoints():
 
     assert "/feedback/answer" in paths
     assert "/admin/feedback" in paths
+    assert "/admin/feedback/triage" in paths
     assert paths["/admin/feedback"]["get"]["security"] == [{"AdminTokenAuth": []}]
+    assert paths["/admin/feedback/triage"]["get"]["security"] == [{"AdminTokenAuth": []}]
     create_schema = paths["/feedback/answer"]["post"]["responses"]["201"]["content"]["application/json"]["schema"]
     list_schema = paths["/admin/feedback"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    triage_schema = paths["/admin/feedback/triage"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
     assert create_schema["$ref"] == "#/components/schemas/AnswerFeedback"
     assert list_schema["$ref"] == "#/components/schemas/AnswerFeedbackListResponse"
+    assert triage_schema["$ref"] == "#/components/schemas/AnswerFeedbackTriageResponse"
     assert "AnswerFeedbackRequest" in schemas
     assert "AnswerFeedback" in schemas
     assert "AnswerFeedbackListResponse" in schemas
+    assert "AnswerFeedbackTriageItem" in schemas
+    assert "AnswerFeedbackTriageResponse" in schemas
     assert "category" in schemas["AnswerFeedbackRequest"]["properties"]
     assert "category" in schemas["AnswerFeedback"]["properties"]
+    assert "final_answer" in schemas["AnswerFeedbackTriageItem"]["properties"]
+    assert "evidence_count" in schemas["AnswerFeedbackTriageItem"]["properties"]

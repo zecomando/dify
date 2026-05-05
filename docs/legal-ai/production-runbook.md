@@ -341,7 +341,8 @@ Ação:
 - Rever feedback negativo.
 - Rever documentos em `pending_review`.
 - Usar `/admin/documents/review-queue` para priorizar documentos sem blockers.
-- Em operação local sem FastAPI, usar `legal-review-queue` ou `legal-review-queue --json`.
+- Usar `/admin/feedback/triage` para priorizar feedback negativo com pergunta, resposta final, veredicto e evidência.
+- Em operação local sem FastAPI, usar `legal-review-queue`, `legal-feedback-triage` ou os respetivos modos `--json`.
 - Aprovar, rejeitar ou arquivar documentos via `/admin/documents/{document_id}/status` com `change_note` auditável.
 - Investigar blockers `409` antes de nova tentativa de promoção para `chat_ready`.
 - Rever fontes com alterações.

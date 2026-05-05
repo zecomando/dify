@@ -399,6 +399,29 @@ class AnswerFeedbackListResponse(BaseModel):
     total: int
 
 
+class AnswerFeedbackTriageItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: AnswerFeedbackResponse
+    audit_id: str
+    session_id: str | None = None
+    user_id: str | None = None
+    user_query: str
+    final_answer: str
+    verdict: ValidatorVerdict
+    confidence: str
+    abstained: bool
+    evidence_count: int
+    audit_created_at: str
+
+
+class AnswerFeedbackTriageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AnswerFeedbackTriageItemResponse]
+    total: int
+
+
 class EvaluationRunSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

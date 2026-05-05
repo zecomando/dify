@@ -56,9 +56,9 @@ A implementação local vive em `legal-engine-api/` e fornece:
 - **Pipeline orquestrado** em `POST /chat/answer`.
 - **Workflow Dify importável** em `dify-chat-answer.yml`.
 - **Estratégia de UI versionada** em `adr/0004-ui-strategy.md`: Dify para piloto/beta curta e UI própria para produção robusta se a beta validar.
-- **Admin mínimo protegido por `X-Admin-Token`** para documentos, chunks, jobs, auditorias, feedback e avaliações.
+- **Admin mínimo protegido por `X-Admin-Token`** para documentos, chunks, jobs, auditorias, feedback, triagem de feedback negativo e avaliações.
 - **Corpus inicial determinístico** via CLI `legal-seed` ou `POST /admin/corpus/seed`.
-- **Auditoria de respostas** em `GET /admin/audit/{answer_id}` e feedback por resposta em `POST /feedback/answer`.
+- **Auditoria de respostas** em `GET /admin/audit/{answer_id}`, feedback por resposta em `POST /feedback/answer` e triagem em `GET /admin/feedback/triage`.
 - **Quality gates determinísticos** via CLI `uv run --project legal-engine-api legal-eval`.
 - **Execução persistida de avaliações** em `POST /admin/evaluation/run`.
 - **Consulta histórica de avaliações** em `GET /admin/evaluation/runs/{run_id}`.

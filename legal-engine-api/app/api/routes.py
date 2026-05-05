@@ -25,6 +25,7 @@ from app.evaluation import (
     get_default_evals_dir,
     run_and_persist_evaluation,
 )
+from app.feedback_triage import FeedbackTriageItem, list_feedback_triage
 from app.ingestion import crawl_url, ingest_source, promote_document, reindex_corpus
 from app.pipeline import answer_chat
 from app.provider_readiness import ProviderReadinessResult, get_provider_readiness
@@ -57,6 +58,8 @@ from app.schemas import (
     AnswerFeedbackRating,
     AnswerFeedbackRequest,
     AnswerFeedbackResponse,
+    AnswerFeedbackTriageItemResponse,
+    AnswerFeedbackTriageResponse,
     AnswerValidateRequest,
     AnswerValidateResponse,
     ChatAnswerRequest,
@@ -223,6 +226,23 @@ def _answer_feedback_to_response(feedback: AnswerFeedbackRecord) -> AnswerFeedba
         user_id=feedback.user_id,
         session_id=feedback.session_id,
         created_at=feedback.created_at,
+    )
+
+
+def _feedback_triage_item_to_response(item: FeedbackTriageItem) -> AnswerFeedbackTriageItemResponse:
+    audit = item.audit
+    return AnswerFeedbackTriageItemResponse(
+        feedback=_answer_feedback_to_response(item.feedback),
+        audit_id=audit.id,
+        session_id=audit.session_id,
+        user_id=audit.user_id,
+        user_query=audit.user_query,
+        final_answer=audit.final_answer,
+        verdict=audit.verdict,
+        confidence=audit.confidence,
+        abstained=audit.abstained,
+        evidence_count=item.evidence_count,
+        audit_created_at=audit.created_at,
     )
 
 
@@ -598,6 +618,29 @@ def get_answer_audit(
     if audit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Answer audit not found.")
     return answer_audit_to_response(audit)
+
+
+@router.get("/admin/feedback/triage", response_model=AnswerFeedbackTriageResponse, dependencies=admin_dependencies)
+def list_answer_feedback_triage(
+    category: AnswerFeedbackCategory | None = None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    repository: LegalRepository = Depends(get_repository),
+) -> AnswerFeedbackTriageResponse:
+    result = list_feedback_triage(
+        repository,
+        category=category.value if category is not None else None,
+        session_id=session_id,
+        user_id=user_id,
+        limit=limit,
+        offset=offset,
+    )
+    return AnswerFeedbackTriageResponse(
+        items=[_feedback_triage_item_to_response(item) for item in result.items],
+        total=result.total,
+    )
 
 
 @router.get("/admin/feedback", response_model=AnswerFeedbackListResponse, dependencies=admin_dependencies)

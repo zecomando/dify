@@ -571,6 +571,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnswerFeedbackListResponse"
+  /admin/feedback/triage:
+    get:
+      summary: List negative answer feedback with audit context for legal triage
+      operationId: listAnswerFeedbackTriage
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [wrong_source, incomplete_answer, legal_error, too_vague, outdated_source, other]
+        - name: session_id
+          in: query
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Negative feedback triage list with answer audit context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerFeedbackTriageResponse"
   /admin/ingestion/jobs:
     get:
       summary: List ingestion, crawl and reindex jobs
@@ -1655,6 +1695,57 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AnswerFeedback"
+        total:
+          type: integer
+    AnswerFeedbackTriageItem:
+      type: object
+      required:
+        - feedback
+        - audit_id
+        - user_query
+        - final_answer
+        - verdict
+        - confidence
+        - abstained
+        - evidence_count
+        - audit_created_at
+      properties:
+        feedback:
+          $ref: "#/components/schemas/AnswerFeedback"
+        audit_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        user_id:
+          type: string
+        user_query:
+          type: string
+        final_answer:
+          type: string
+        verdict:
+          type: string
+          enum: [pass, abstain, fail]
+        confidence:
+          type: string
+        abstained:
+          type: boolean
+        evidence_count:
+          type: integer
+          minimum: 0
+        audit_created_at:
+          type: string
+          format: date-time
+    AnswerFeedbackTriageResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerFeedbackTriageItem"
         total:
           type: integer
     AnswerAudit:

@@ -243,7 +243,7 @@ O backlog abaixo distingue:
 
 ### P1.3 — Admin mínimo
 
-**Estado local:** Admin API protegido por `X-Admin-Token` já permite listar documentos, consultar fila de revisão com blockers de promoção, consultar documento/chunks/texto bruto, promover/rejeitar/arquivar status com `change_note` obrigatório, validação da source policy e blockers explícitos para `chat_ready`, listar/consultar auditorias, correr/listar avaliações, seedar corpus, reindexar e consultar jobs. Operadores locais também conseguem usar `legal-review-queue` e `legal-ingestion-jobs` sem iniciar FastAPI.
+**Estado local:** Admin API protegido por `X-Admin-Token` já permite listar documentos, consultar fila de revisão com blockers de promoção, consultar documento/chunks/texto bruto, promover/rejeitar/arquivar status com `change_note` obrigatório, validação da source policy e blockers explícitos para `chat_ready`, listar/consultar auditorias, triar feedback negativo com contexto da auditoria, correr/listar avaliações, seedar corpus, reindexar e consultar jobs. Operadores locais também conseguem usar `legal-review-queue`, `legal-feedback-triage` e `legal-ingestion-jobs` sem iniciar FastAPI.
 
 **Próximas tarefas:**
 
@@ -269,14 +269,14 @@ O backlog abaixo distingue:
 
 ### P1.5 — Feedback do utilizador
 
-**Estado local:** implementado no MVP local com `answer_feedback` associado a `audit_id`, submissão em `POST /feedback/answer` e listagem/filtros admin em `GET /admin/feedback`.
+**Estado local:** implementado no MVP local com `answer_feedback` associado a `audit_id`, submissão em `POST /feedback/answer`, listagem/filtros admin em `GET /admin/feedback`, triagem protegida de feedback negativo em `GET /admin/feedback/triage` e helper local `legal-feedback-triage` para export JSON/humano com pergunta, resposta final, veredicto, confiança e contagem de evidências.
 
 **Próximas tarefas:**
 
 - Expandir `rating` para categorias jurídicas operacionais se necessário.
 - Suportar categorias: fonte errada, resposta incompleta, erro jurídico, resposta demasiado vaga.
 - Expor endpoint protegido contra abuso.
-- Criar export para revisão jurídica.
+- Ligar a triagem de feedback negativo à futura UI/admin ou rotina n8n de alerta.
 
 ## P2 — Produto comercial
 

@@ -269,6 +269,7 @@ Entregáveis:
 - Fila operacional via `/admin/documents/review-queue` com blockers e elegibilidade de promoção.
 - Helper local `legal-review-queue` para consultar a mesma fila sem iniciar FastAPI.
 - Helper local `legal-ingestion-jobs` para consultar jobs, erros e documentos associados sem iniciar FastAPI.
+- Fila de triagem via `/admin/feedback/triage` e helper local `legal-feedback-triage` para exportar feedback negativo com contexto da auditoria.
 
 Critério de aceitação:
 
