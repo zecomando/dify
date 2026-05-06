@@ -1081,6 +1081,34 @@ def test_crawl_url_fetches_and_ingests_hudoc_case_law(tmp_path: Path):
     assert document.legal_metadata["decision_date"] == "2023-03-14"
 
 
+def test_crawl_url_extracts_hudoc_application_number_label_variant(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://hudoc.echr.coe.int/eng?i=001-654321"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>European Court of Human Rights judgment</h1>
+            <p>Court: European Court of Human Rights</p>
+            <p>Application Number: 12345/20</p>
+            <p>Date: 2023-03-14</p>
+            <p>Article 6 and fair trial guarantees.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["application_number"] == "12345/20"
+
+
 def test_crawl_url_rejects_when_remote_fetch_fails(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(

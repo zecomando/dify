@@ -317,7 +317,7 @@ def _curia_case_law_metadata(source_url: str, raw_text: str) -> dict[str, str]:
 def _hudoc_case_law_metadata(source_url: str, raw_text: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
     court = _first_match((r"(?m)^Court:[ \t]*([^\n]+)", r"\b(European Court of Human Rights)\b"), raw_text)
-    application_number = _first_match((r"(?m)^Application\s+no\.?:?[ \t]*([0-9]+/[0-9]+)",), raw_text)
+    application_number = _first_match((r"(?m)^Application\s+(?:no\.?|number):?[ \t]*([0-9]+/[0-9]+)",), raw_text)
     decision_date = _first_match((r"(?m)^Date:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",), raw_text)
     if court:
         metadata["court"] = court.strip().rstrip(".")
