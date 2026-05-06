@@ -56,12 +56,15 @@ class UrllibRemoteFetcher:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read(self.max_bytes + 1)
                 if len(body) > self.max_bytes:
-                    body = body[: self.max_bytes]
+                    raise RemoteFetchError(f"Remote response exceeded maximum size of {self.max_bytes} bytes.")
+                content_type = response.headers.get_content_type()
+                if not _is_supported_text_content_type(content_type):
+                    raise RemoteFetchError(f"Unsupported remote content type: {content_type}.")
                 charset = response.headers.get_content_charset() or "utf-8"
                 return RemoteFetchResult(
                     final_url=response.geturl(),
                     status_code=response.getcode(),
-                    content_type=response.headers.get_content_type(),
+                    content_type=content_type,
                     text=body.decode(charset, errors="replace"),
                 )
         except HTTPError as exc:
@@ -70,6 +73,12 @@ class UrllibRemoteFetcher:
             raise RemoteFetchError(f"Remote fetch failed: {exc.reason}.") from exc
         except TimeoutError as exc:
             raise RemoteFetchError("Remote fetch timed out.") from exc
+
+
+def _is_supported_text_content_type(content_type: str) -> bool:
+    if content_type.startswith("text/"):
+        return True
+    return content_type in {"application/xhtml+xml", "application/xml", "application/json"}
 
 
 def parse_remote_legal_source(

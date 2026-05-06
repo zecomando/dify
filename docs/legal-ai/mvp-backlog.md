@@ -77,7 +77,7 @@ O backlog abaixo distingue:
 
 **Objetivo:** criar corpus inicial legislativo.
 
-**Estado local:** ingestão manual/crawl inicial implementada com persistência de texto bruto, chunking determinístico, embeddings locais com `vector_id`, reindexação a partir do bruto e promoção para `chat_ready` apenas quando há chunks e requisitos da source policy. Corpus inicial determinístico seedável via `legal-seed` e `POST /admin/corpus/seed` implementado para demo local. Corpus real ampliado de produção continua pendente.
+**Estado local:** ingestão manual/crawl inicial implementada com persistência de texto bruto, fetch remoto com rejeição de respostas demasiado grandes ou não textuais, chunking determinístico, embeddings locais com `vector_id`, reindexação a partir do bruto e promoção para `chat_ready` apenas quando há chunks e requisitos da source policy. Corpus inicial determinístico seedável via `legal-seed` e `POST /admin/corpus/seed` implementado para demo local. Corpus real ampliado de produção continua pendente.
 
 **Concluído localmente:**
 
@@ -85,6 +85,7 @@ O backlog abaixo distingue:
 - Seed de legislação UE.
 - Chunking por artigo.
 - Persistência de bruto.
+- Rejeição de fetch remoto não textual ou acima do limite configurado.
 - Promoção controlada por source policy.
 - Reindexação local a partir do bruto, com aviso operacional quando documentos são saltados por falta de texto bruto persistido.
 - Embeddings locais determinísticos por chunk.

@@ -1,10 +1,11 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes import get_repository
 from app.ingestion import crawl_url, ingest_source, promote_document, reindex_corpus
-from app.remote_sources import RemoteFetchError, RemoteFetchResult
+from app.remote_sources import RemoteFetchError, RemoteFetchResult, UrllibRemoteFetcher
 from app.main import app
 from app.repository import LegalRepository
 from app.schemas import (
@@ -51,6 +52,59 @@ class FlakyRemoteFetcher:
         if self.calls <= self.failures_before_success:
             raise RemoteFetchError("Temporary remote fetch failure.")
         return RemoteFetchResult(final_url=url, status_code=200, content_type="text/html", text=self.text)
+
+
+class FakeUrlopenHeaders:
+    def __init__(self, *, content_type: str, charset: str | None = "utf-8") -> None:
+        self.content_type = content_type
+        self.charset = charset
+
+    def get_content_charset(self) -> str | None:
+        return self.charset
+
+    def get_content_type(self) -> str:
+        return self.content_type
+
+
+class FakeUrlopenResponse:
+    def __init__(self, *, body: bytes, content_type: str = "text/html") -> None:
+        self.body = body
+        self.headers = FakeUrlopenHeaders(content_type=content_type)
+
+    def __enter__(self) -> "FakeUrlopenResponse":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        return None
+
+    def read(self, size: int) -> bytes:
+        return self.body[:size]
+
+    def geturl(self) -> str:
+        return "https://dre.pt/example"
+
+    def getcode(self) -> int:
+        return 200
+
+
+def test_urllib_remote_fetcher_rejects_oversized_remote_response(monkeypatch):
+    def fake_urlopen(request: object, timeout: int) -> FakeUrlopenResponse:
+        return FakeUrlopenResponse(body=b"abcdef")
+
+    monkeypatch.setattr("app.remote_sources.urlopen", fake_urlopen)
+
+    with pytest.raises(RemoteFetchError, match="exceeded maximum size"):
+        UrllibRemoteFetcher(max_bytes=5).fetch("https://dre.pt/example")
+
+
+def test_urllib_remote_fetcher_rejects_non_text_remote_response(monkeypatch):
+    def fake_urlopen(request: object, timeout: int) -> FakeUrlopenResponse:
+        return FakeUrlopenResponse(body=b"%PDF-1.7", content_type="application/pdf")
+
+    monkeypatch.setattr("app.remote_sources.urlopen", fake_urlopen)
+
+    with pytest.raises(RemoteFetchError, match="Unsupported remote content type: application/pdf"):
+        UrllibRemoteFetcher().fetch("https://dre.pt/example.pdf")
 
 
 def test_ingest_source_creates_completed_job_and_pending_review_document(tmp_path: Path):
