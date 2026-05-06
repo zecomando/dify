@@ -637,6 +637,60 @@ def test_crawl_url_fetches_and_ingests_eurlex_source_with_celex(tmp_path: Path):
     assert any(chunk.citation_label == "Artigo 6.º" for chunk in chunks)
 
 
+def test_crawl_url_extracts_encoded_eurlex_celex_from_url(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://eur-lex.europa.eu/legal-content/PT/TXT/?uri=CELEX%3A32016R0679"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Regulamento Geral sobre a Proteção de Dados</h1>
+            <h2>Artigo 6.º</h2>
+            <p>O regulamento define bases de licitude para dados pessoais.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "chat_ready"
+    assert document.legal_metadata == {"celex": "32016R0679"}
+
+
+def test_crawl_url_extracts_dre_eli_from_source_url(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/eli/lei/7/2009/02/12/p/dre/pt/html"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Lei n.º 7/2009</h1>
+            <h2>Artigo 1.º</h2>
+            <p>É aprovado o Código do Trabalho.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "chat_ready"
+    assert document.legal_metadata["eli"] == "https://dre.pt/eli/lei/7/2009/02/12/p/dre/pt/html"
+
+
 def test_crawl_url_fetches_and_ingests_dgsi_case_law_with_required_metadata(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(

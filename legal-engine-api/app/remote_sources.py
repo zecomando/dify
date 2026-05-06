@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from html import unescape
 from typing import Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from app.source_policy import SourcePolicyAuthority, normalize_url_domain
@@ -204,14 +205,18 @@ def _eurlex_document_type(legal_metadata: dict[str, str], allowed_document_types
 
 def _eurlex_metadata(source_url: str, raw_text: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
+    decoded_url = unquote(source_url)
+    query_values = parse_qs(urlparse(source_url).query)
+    uri_values = query_values.get("uri", ())
     celex = _first_match(
         (
+            r"^CELEX:([0-9A-Z]+)$",
             r"[?&]uri=CELEX:([0-9A-Z]+)",
             r"CELEX[:\s]*([0-9][0-9A-Z]{4,})",
         ),
-        f"{source_url}\n{raw_text}",
+        "\n".join((*uri_values, source_url, decoded_url, raw_text)),
     )
-    eli = _first_match((r"ELI[:\s]*([^\s,;]+)", r"/eli/([^\s?#]+)"), f"{source_url}\n{raw_text}")
+    eli = _first_match((r"ELI[:\s]*([^\s,;]+)", r"/eli/([^\s?#]+)"), f"{source_url}\n{decoded_url}\n{raw_text}")
     if celex:
         metadata["celex"] = celex.upper()
     if eli:
@@ -221,7 +226,14 @@ def _eurlex_metadata(source_url: str, raw_text: str) -> dict[str, str]:
 
 def _dre_metadata(source_url: str, raw_text: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
-    eli = _first_match((r"ELI[:\s]*(https?://[^\s,;]+)", r"(https?://data\.dre\.pt/eli/[^\s,;]+)"), raw_text)
+    decoded_url = unquote(source_url)
+    eli = _first_match(
+        (
+            r"ELI[:\s]*(https?://[^\s,;]+)",
+            r"(https?://(?:data\.)?dre\.pt/eli/[^\s,;]+)",
+        ),
+        f"{source_url}\n{decoded_url}\n{raw_text}",
+    )
     diploma = _dre_diploma(raw_text)
     if eli:
         metadata["eli"] = eli.strip().rstrip(".")
