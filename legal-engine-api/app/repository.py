@@ -1297,6 +1297,7 @@ class LegalRepository:
         self,
         *,
         verdict: str | None = None,
+        abstained: bool | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
     ) -> int:
@@ -1305,6 +1306,9 @@ class LegalRepository:
         if verdict is not None:
             clauses.append("verdict = ?")
             params.append(verdict)
+        if abstained is not None:
+            clauses.append("abstained = ?")
+            params.append(int(abstained))
         if session_id is not None:
             clauses.append("session_id = ?")
             params.append(session_id)

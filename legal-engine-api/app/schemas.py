@@ -565,14 +565,49 @@ class AdminDiagnosticsResponse(BaseModel):
     reranker_model: str
 
 
+class AdminDocumentMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total: int
+    chat_ready: int
+    pending_review: int
+    archived: int
+    rejected: int
+
+
+class AdminIngestionJobMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total: int
+    completed: int
+    rejected: int
+    pending: int
+
+
+class AdminAnswerAuditMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total: int
+    pass_: int = Field(alias="pass")
+    abstain: int
+    fail: int
+    abstained: int
+
+
+class AdminTotalMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total: int
+
+
 class AdminMetricsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    documents: dict[str, int]
-    ingestion_jobs: dict[str, int]
-    answer_audits: dict[str, int]
-    answer_feedback: dict[str, int]
-    evaluation_runs: dict[str, int]
+    documents: AdminDocumentMetricsResponse
+    ingestion_jobs: AdminIngestionJobMetricsResponse
+    answer_audits: AdminAnswerAuditMetricsResponse
+    answer_feedback: AdminTotalMetricsResponse
+    evaluation_runs: AdminTotalMetricsResponse
 
 
 class ProviderReadinessItem(BaseModel):

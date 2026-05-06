@@ -352,7 +352,13 @@ def get_admin_metrics(repository: LegalRepository = Depends(get_repository)) -> 
             "rejected": repository.count_jobs(status=IngestionJobStatus.REJECTED.value),
             "pending": repository.count_jobs(status=IngestionJobStatus.PENDING.value),
         },
-        answer_audits={"total": repository.count_answer_audits()},
+        answer_audits={
+            "total": repository.count_answer_audits(),
+            "pass": repository.count_answer_audits(verdict=ValidatorVerdict.PASS.value),
+            "abstain": repository.count_answer_audits(verdict=ValidatorVerdict.ABSTAIN.value),
+            "fail": repository.count_answer_audits(verdict=ValidatorVerdict.FAIL.value),
+            "abstained": repository.count_answer_audits(abstained=True),
+        },
         answer_feedback={"total": repository.count_answer_feedback()},
         evaluation_runs={"total": repository.count_evaluation_runs()},
     )

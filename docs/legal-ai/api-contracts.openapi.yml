@@ -278,6 +278,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminDiagnosticsResponse"
+  /admin/metrics:
+    get:
+      summary: Inspect operational metrics for documents, jobs, audits, feedback and evaluations
+      operationId: getAdminMetrics
+      security:
+        - AdminTokenAuth: []
+      responses:
+        "200":
+          description: Admin operational metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMetricsResponse"
   /admin/corpus/seed:
     post:
       summary: Seed the deterministic initial local corpus
@@ -1632,6 +1645,83 @@ components:
           type: string
         reranker_model:
           type: string
+    AdminMetricsResponse:
+      type: object
+      required:
+        - documents
+        - ingestion_jobs
+        - answer_audits
+        - answer_feedback
+        - evaluation_runs
+      properties:
+        documents:
+          type: object
+          required:
+            - total
+            - chat_ready
+            - pending_review
+            - archived
+            - rejected
+          properties:
+            total:
+              type: integer
+            chat_ready:
+              type: integer
+            pending_review:
+              type: integer
+            archived:
+              type: integer
+            rejected:
+              type: integer
+        ingestion_jobs:
+          type: object
+          required:
+            - total
+            - completed
+            - rejected
+            - pending
+          properties:
+            total:
+              type: integer
+            completed:
+              type: integer
+            rejected:
+              type: integer
+            pending:
+              type: integer
+        answer_audits:
+          type: object
+          required:
+            - total
+            - pass
+            - abstain
+            - fail
+            - abstained
+          properties:
+            total:
+              type: integer
+            pass:
+              type: integer
+            abstain:
+              type: integer
+            fail:
+              type: integer
+            abstained:
+              type: integer
+        answer_feedback:
+          type: object
+          required:
+            - total
+          properties:
+            total:
+              type: integer
+        evaluation_runs:
+          type: object
+          required:
+            - total
+          properties:
+            total:
+              type: integer
     InitialCorpusSeedResponse:
       type: object
       required:

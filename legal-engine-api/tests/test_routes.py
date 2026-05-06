@@ -741,11 +741,17 @@ def test_admin_diagnostics_and_metrics_endpoints_return_operational_counts(tmp_p
     app.dependency_overrides[get_repository] = lambda: repository
 
     try:
+        pass_answer_response = client.post("/chat/answer", json={"question": "Texto civil"})
+        abstain_answer_response = client.post("/chat/answer", json={"question": "matéria sem corpus suficiente"})
         diagnostics_response = client.get("/admin/diagnostics", headers=ADMIN_HEADERS)
         metrics_response = client.get("/admin/metrics", headers=ADMIN_HEADERS)
     finally:
         app.dependency_overrides.clear()
 
+    assert pass_answer_response.status_code == 200
+    assert pass_answer_response.json()["verdict"] == "pass"
+    assert abstain_answer_response.status_code == 200
+    assert abstain_answer_response.json()["verdict"] == "abstain"
     assert diagnostics_response.status_code == 200
     diagnostics = diagnostics_response.json()
     assert diagnostics["status"] == "ok"
@@ -765,6 +771,13 @@ def test_admin_diagnostics_and_metrics_endpoints_return_operational_counts(tmp_p
     assert metrics["documents"]["chat_ready"] == 1
     assert metrics["ingestion_jobs"]["completed"] == 1
     assert metrics["ingestion_jobs"]["rejected"] == 1
+    assert metrics["answer_audits"] == {
+        "total": 2,
+        "pass": 1,
+        "abstain": 1,
+        "fail": 0,
+        "abstained": 1,
+    }
 
 
 def test_admin_provider_readiness_reports_missing_providers_without_secret_values(monkeypatch):

@@ -93,6 +93,24 @@ def test_openapi_contract_includes_admin_diagnostics_model_metadata():
     assert "reranker_model" in properties
 
 
+def test_openapi_contract_includes_admin_metrics_answer_audit_breakdown():
+    contract = _openapi_contract()
+    paths = contract["paths"]
+    schemas = contract["components"]["schemas"]
+
+    assert "/admin/metrics" in paths
+    assert paths["/admin/metrics"]["get"]["security"] == [{"AdminTokenAuth": []}]
+    metrics_schema = paths["/admin/metrics"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert metrics_schema["$ref"] == "#/components/schemas/AdminMetricsResponse"
+    answer_audits_schema = schemas["AdminMetricsResponse"]["properties"]["answer_audits"]
+    answer_audits_properties = answer_audits_schema["properties"]
+    assert "total" in answer_audits_properties
+    assert "pass" in answer_audits_properties
+    assert "abstain" in answer_audits_properties
+    assert "fail" in answer_audits_properties
+    assert "abstained" in answer_audits_properties
+
+
 def test_openapi_contract_exposes_legal_metadata_in_core_models():
     schemas = _openapi_contract()["components"]["schemas"]
 
