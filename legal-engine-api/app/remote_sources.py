@@ -269,7 +269,14 @@ def _case_law_metadata(source_url: str, raw_text: str, source: str) -> dict[str,
 
 def _portuguese_case_law_metadata(source_url: str, raw_text: str, source: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
-    court = _first_match((r"(?m)^Tribunal:[ \t]*([^\n]+)", r"\b(Supremo Tribunal de Justiça)\b"), raw_text)
+    court = _first_match(
+        (
+            r"(?m)^Tribunal:[ \t]*([^\n]+)",
+            r"(?m)^Acórdão\s+d[oa]\s+((?:Supremo\s+)?Tribunal[^\n]+)",
+            r"\b(Supremo Tribunal de Justiça)\b",
+        ),
+        raw_text,
+    )
     process_number = _first_match((r"(?m)^Processo(?:\s+n[.ººo]*)?:?[ \t]*([A-Z0-9./-]+)",), raw_text)
     decision_date = _first_match(
         (

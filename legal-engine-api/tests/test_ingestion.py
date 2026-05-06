@@ -780,6 +780,35 @@ def test_crawl_url_normalizes_portuguese_case_law_dash_date(tmp_path: Path):
     assert document.legal_metadata["decision_date"] == "2024-02-08"
 
 
+def test_crawl_url_extracts_portuguese_court_from_title(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.dgsi.pt/jtrp.nsf/56a6e7121657f91e80257cda00381fdf/example"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Tribunal da Relação do Porto</h1>
+            <p>Processo: 123/21.0T8PRT.P1</p>
+            <p>Data do Acórdão: 15/03/2024</p>
+            <p>Responsabilidade civil contratual.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["court"] == "Tribunal da Relação do Porto"
+    assert document.legal_metadata["decision_date"] == "2024-03-15"
+    assert document.legal_metadata["process_number"] == "123/21.0T8PRT.P1"
+
+
 def test_crawl_url_case_law_can_be_promoted_after_human_review(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(
