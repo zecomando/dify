@@ -72,6 +72,8 @@ class UrllibRemoteFetcher:
                     text=body.decode(charset, errors="replace"),
                 )
         except HTTPError as exc:
+            if 400 <= exc.code < 500:
+                raise PermanentRemoteFetchError(f"Remote fetch failed with HTTP {exc.code}.") from exc
             raise RemoteFetchError(f"Remote fetch failed with HTTP {exc.code}.") from exc
         except URLError as exc:
             raise RemoteFetchError(f"Remote fetch failed: {exc.reason}.") from exc

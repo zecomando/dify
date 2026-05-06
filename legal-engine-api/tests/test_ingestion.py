@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 from fastapi.testclient import TestClient
@@ -114,6 +115,27 @@ def test_urllib_remote_fetcher_rejects_non_text_remote_response(monkeypatch):
 
     with pytest.raises(RemoteFetchError, match="Unsupported remote content type: application/pdf"):
         UrllibRemoteFetcher().fetch("https://dre.pt/example.pdf")
+
+
+def test_urllib_remote_fetcher_treats_http_404_as_permanent_error(monkeypatch):
+    def fake_urlopen(request: object, timeout: int) -> FakeUrlopenResponse:
+        raise HTTPError("https://dre.pt/missing", 404, "Not Found", hdrs=None, fp=None)
+
+    monkeypatch.setattr("app.remote_sources.urlopen", fake_urlopen)
+
+    with pytest.raises(PermanentRemoteFetchError, match="Remote fetch failed with HTTP 404"):
+        UrllibRemoteFetcher().fetch("https://dre.pt/missing")
+
+
+def test_urllib_remote_fetcher_treats_http_503_as_transient_error(monkeypatch):
+    def fake_urlopen(request: object, timeout: int) -> FakeUrlopenResponse:
+        raise HTTPError("https://dre.pt/unavailable", 503, "Service Unavailable", hdrs=None, fp=None)
+
+    monkeypatch.setattr("app.remote_sources.urlopen", fake_urlopen)
+
+    with pytest.raises(RemoteFetchError, match="Remote fetch failed with HTTP 503") as exc_info:
+        UrllibRemoteFetcher().fetch("https://dre.pt/unavailable")
+    assert not isinstance(exc_info.value, PermanentRemoteFetchError)
 
 
 def test_ingest_source_creates_completed_job_and_pending_review_document(tmp_path: Path):
