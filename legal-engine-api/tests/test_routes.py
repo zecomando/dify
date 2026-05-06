@@ -755,6 +755,11 @@ def test_admin_diagnostics_and_metrics_endpoints_return_operational_counts(tmp_p
     assert diagnostics["ingestion_jobs_total"] == 2
     assert diagnostics["ingestion_jobs_completed"] == 1
     assert diagnostics["ingestion_jobs_rejected"] == 1
+    assert diagnostics["model_generator"] == "deterministic-evidence-summarizer"
+    assert diagnostics["model_validator"] == "deterministic-source-validator"
+    assert diagnostics["generator_prompt_version"] == "legal-deterministic-generator-v1"
+    assert diagnostics["validator_prompt_version"] == "legal-deterministic-validator-v1"
+    assert diagnostics["reranker_model"] == "deterministic-score-sort"
     assert metrics_response.status_code == 200
     metrics = metrics_response.json()
     assert metrics["documents"]["chat_ready"] == 1

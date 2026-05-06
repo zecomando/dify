@@ -558,6 +558,11 @@ class AdminDiagnosticsResponse(BaseModel):
     answer_audits_total: int
     answer_feedback_total: int
     evaluation_runs_total: int
+    model_generator: str
+    model_validator: str
+    generator_prompt_version: str
+    validator_prompt_version: str
+    reranker_model: str
 
 
 class AdminMetricsResponse(BaseModel):

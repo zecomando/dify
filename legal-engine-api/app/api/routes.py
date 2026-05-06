@@ -7,7 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict
 
-from app.audit import answer_audit_to_response
+from app.audit import (
+    DETERMINISTIC_GENERATOR_MODEL,
+    DETERMINISTIC_RERANKER_MODEL,
+    DETERMINISTIC_VALIDATOR_MODEL,
+    GENERATOR_PROMPT_VERSION,
+    VALIDATOR_PROMPT_VERSION,
+    answer_audit_to_response,
+)
 from app.config import get_settings
 from app.corpus import InitialCorpusSeedResult, seed_initial_corpus
 from app.engine import (
@@ -321,6 +328,11 @@ def get_admin_diagnostics(
         answer_audits_total=repository.count_answer_audits(),
         answer_feedback_total=repository.count_answer_feedback(),
         evaluation_runs_total=repository.count_evaluation_runs(),
+        model_generator=DETERMINISTIC_GENERATOR_MODEL,
+        model_validator=DETERMINISTIC_VALIDATOR_MODEL,
+        generator_prompt_version=GENERATOR_PROMPT_VERSION,
+        validator_prompt_version=VALIDATOR_PROMPT_VERSION,
+        reranker_model=DETERMINISTIC_RERANKER_MODEL,
     )
 
 

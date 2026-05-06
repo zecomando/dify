@@ -76,6 +76,23 @@ def test_openapi_contract_includes_admin_provider_readiness_endpoint():
     assert "ProviderReadinessItem" in schemas
 
 
+def test_openapi_contract_includes_admin_diagnostics_model_metadata():
+    contract = _openapi_contract()
+    paths = contract["paths"]
+    schemas = contract["components"]["schemas"]
+
+    assert "/admin/diagnostics" in paths
+    assert paths["/admin/diagnostics"]["get"]["security"] == [{"AdminTokenAuth": []}]
+    diagnostics_schema = paths["/admin/diagnostics"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert diagnostics_schema["$ref"] == "#/components/schemas/AdminDiagnosticsResponse"
+    properties = schemas["AdminDiagnosticsResponse"]["properties"]
+    assert "model_generator" in properties
+    assert "model_validator" in properties
+    assert "generator_prompt_version" in properties
+    assert "validator_prompt_version" in properties
+    assert "reranker_model" in properties
+
+
 def test_openapi_contract_exposes_legal_metadata_in_core_models():
     schemas = _openapi_contract()["components"]["schemas"]
 

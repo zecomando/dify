@@ -265,6 +265,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminProviderReadinessResponse"
+  /admin/diagnostics:
+    get:
+      summary: Inspect local operational diagnostics and deterministic model metadata
+      operationId: getAdminDiagnostics
+      security:
+        - AdminTokenAuth: []
+      responses:
+        "200":
+          description: Admin diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDiagnosticsResponse"
   /admin/corpus/seed:
     post:
       summary: Seed the deterministic initial local corpus
@@ -1552,6 +1565,73 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProviderReadinessItem"
+    AdminDiagnosticsResponse:
+      type: object
+      required:
+        - status
+        - database_backend
+        - source_policy_name
+        - source_policy_version
+        - documents_total
+        - chat_ready_documents
+        - pending_review_documents
+        - archived_documents
+        - rejected_documents
+        - ingestion_jobs_total
+        - ingestion_jobs_completed
+        - ingestion_jobs_rejected
+        - ingestion_jobs_pending
+        - answer_audits_total
+        - answer_feedback_total
+        - evaluation_runs_total
+        - model_generator
+        - model_validator
+        - generator_prompt_version
+        - validator_prompt_version
+        - reranker_model
+      properties:
+        status:
+          type: string
+        database_backend:
+          type: string
+        source_policy_name:
+          type: string
+        source_policy_version:
+          type: integer
+        documents_total:
+          type: integer
+        chat_ready_documents:
+          type: integer
+        pending_review_documents:
+          type: integer
+        archived_documents:
+          type: integer
+        rejected_documents:
+          type: integer
+        ingestion_jobs_total:
+          type: integer
+        ingestion_jobs_completed:
+          type: integer
+        ingestion_jobs_rejected:
+          type: integer
+        ingestion_jobs_pending:
+          type: integer
+        answer_audits_total:
+          type: integer
+        answer_feedback_total:
+          type: integer
+        evaluation_runs_total:
+          type: integer
+        model_generator:
+          type: string
+        model_validator:
+          type: string
+        generator_prompt_version:
+          type: string
+        validator_prompt_version:
+          type: string
+        reranker_model:
+          type: string
     InitialCorpusSeedResponse:
       type: object
       required:
