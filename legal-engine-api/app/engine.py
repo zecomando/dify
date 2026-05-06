@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.repository import LegalRepository, SearchableChunkRecord
+from app.rerank import LocalScoreRerankerProvider, RerankerProvider
 from app.schemas import (
     AnswerGenerateRequest,
     AnswerGenerateResponse,
@@ -21,7 +22,12 @@ from app.schemas import (
     ValidatorVerdict,
 )
 from app.source_policy import SourcePolicy, SourcePolicyStatus, validate_source_requirements
-from app.vector_index import LocalHashEmbeddingProvider, cosine_similarity
+from app.vector_index import (
+    EmbeddingProvider,
+    LocalHashEmbeddingProvider,
+    LocalVectorStore,
+    VectorStore,
+)
 
 ABSTENTION_MESSAGE = (
     "Não consigo responder com segurança porque não há evidência oficial suficiente validada pela política de fontes."
@@ -50,18 +56,30 @@ def classify_query(payload: ClassifyQueryRequest) -> ClassifyQueryResponse:
 def search_retrieval(
     payload: RetrievalSearchRequest,
     repository: LegalRepository | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
+    vector_store: VectorStore | None = None,
 ) -> RetrievalSearchResponse:
-    if repository is None:
+    if repository is None and vector_store is None:
         return RetrievalSearchResponse(results=[])
 
     query_terms = _terms(payload.query)
     if not query_terms:
         return RetrievalSearchResponse(results=[])
 
-    embedding_provider = LocalHashEmbeddingProvider()
-    query_embedding = embedding_provider.embed(payload.query)
-    scored_results: list[tuple[float, SearchableChunkRecord]] = []
-    for chunk in repository.list_searchable_chunks(current_only=payload.current_only):
+    resolved_embedding_provider = embedding_provider or LocalHashEmbeddingProvider()
+    resolved_vector_store = vector_store
+    if resolved_vector_store is None:
+        if repository is None:
+            return RetrievalSearchResponse(results=[])
+        resolved_vector_store = LocalVectorStore(repository)
+    query_embedding = resolved_embedding_provider.embed(payload.query)
+    scored_results: list[tuple[float, SearchableChunkRecord, str | None]] = []
+    for vector_result in resolved_vector_store.search(
+        query_embedding=query_embedding,
+        embedding_model=resolved_embedding_provider.model_name,
+        current_only=payload.current_only,
+    ):
+        chunk = vector_result.chunk
         if payload.jurisdiction and chunk.jurisdiction not in payload.jurisdiction:
             continue
         if payload.document_types and chunk.document_type not in payload.document_types:
@@ -76,11 +94,10 @@ def search_retrieval(
             continue
 
         sparse_score = _lexical_score(payload.query, query_terms, chunk)
-        chunk_embedding = repository.get_chunk_embedding(chunk.chunk_id, model=embedding_provider.model_name)
-        dense_score = cosine_similarity(query_embedding, chunk_embedding.vector) if chunk_embedding is not None else 0.0
+        dense_score = vector_result.dense_score
         score = _hybrid_score(dense_score=dense_score, sparse_score=sparse_score)
         if score > 0:
-            scored_results.append((score, chunk))
+            scored_results.append((score, chunk, vector_result.vector_id))
 
     scored_results.sort(key=lambda item: item[0], reverse=True)
     limit = max(payload.top_k_dense, payload.top_k_sparse)
@@ -93,6 +110,7 @@ def search_retrieval(
                 source_url=chunk.source_url,
                 text=chunk.text_content,
                 score=round(score, 6),
+                vector_id=vector_id,
                 jurisdiction=chunk.jurisdiction,
                 document_type=chunk.document_type,
                 area=list(chunk.area),
@@ -104,14 +122,16 @@ def search_retrieval(
                 valid_from=chunk.valid_from,
                 valid_until=chunk.valid_until,
             )
-            for score, chunk in scored_results[:limit]
+            for score, chunk, vector_id in scored_results[:limit]
         ]
     )
 
 
-def rerank_results(payload: RerankRequest) -> RerankResponse:
-    ordered = sorted(payload.results, key=lambda result: result.score, reverse=True)
-    return RerankResponse(results=ordered[: payload.top_n])
+def rerank_results(payload: RerankRequest, provider: RerankerProvider | None = None) -> RerankResponse:
+    reranker = provider or LocalScoreRerankerProvider()
+    return RerankResponse(
+        results=list(reranker.rerank(query=payload.query, results=tuple(payload.results), top_n=payload.top_n))
+    )
 
 
 def build_evidence(payload: EvidenceBuildRequest, source_policy: SourcePolicy) -> EvidenceBuildResponse:

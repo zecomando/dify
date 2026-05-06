@@ -5,7 +5,7 @@ from app.ingestion import ingest_source, reindex_corpus
 from app.repository import LegalRepository
 from app.schemas import IngestionSourceRequest, ReindexRequest, RetrievalSearchRequest
 from app.source_policy import SourcePolicy
-from app.vector_index import LOCAL_EMBEDDING_MODEL
+from app.vector_index import LOCAL_EMBEDDING_MODEL, LocalHashEmbeddingProvider, LocalVectorStore
 
 
 POLICY_PATH = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "source-policy.yml"
@@ -44,6 +44,7 @@ def test_search_retrieval_returns_matching_chat_ready_chunks(tmp_path: Path):
     assert response.results[0].citation_label == "Artigo 2.º"
     assert "responsabilidade civil" in response.results[0].text.lower()
     assert response.results[0].score > 0
+    assert response.results[0].vector_id == f"{LOCAL_EMBEDDING_MODEL}:{response.results[0].chunk_id}"
 
 
 def test_search_retrieval_ignores_pending_review_documents(tmp_path: Path):
@@ -108,7 +109,33 @@ def test_ingest_source_persists_local_chunk_embeddings(tmp_path: Path):
     chunks = repository.list_chunks_by_document(job.document_id)
     assert len(chunks) == 2
     assert repository.count_chunk_embeddings(model=LOCAL_EMBEDDING_MODEL) == 2
-    assert repository.get_chunk_embedding(chunks[0].id, model=LOCAL_EMBEDDING_MODEL) is not None
+    embedding = repository.get_chunk_embedding(chunks[0].id, model=LOCAL_EMBEDDING_MODEL)
+    assert embedding is not None
+    assert embedding.vector_id == f"{LOCAL_EMBEDDING_MODEL}:{chunks[0].id}"
+
+
+def test_local_vector_store_returns_persisted_vector_ids(tmp_path: Path):
+    repository = _repository(tmp_path)
+    ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nA responsabilidade civil está prevista na lei.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+    provider = LocalHashEmbeddingProvider()
+
+    results = LocalVectorStore(repository).search(
+        query_embedding=provider.embed("responsabilidade civil"),
+        embedding_model=provider.model_name,
+        current_only=True,
+    )
+
+    assert len(results) == 1
+    assert results[0].vector_id == f"{LOCAL_EMBEDDING_MODEL}:{results[0].chunk.chunk_id}"
+    assert results[0].dense_score > 0
 
 
 def test_search_retrieval_uses_dense_embedding_when_lexical_terms_do_not_match(tmp_path: Path):
@@ -160,7 +187,9 @@ def test_reindex_corpus_refreshes_local_chunk_embeddings(tmp_path: Path):
     assert reindex_response.status == "completed"
     assert len(chunks) == 1
     assert repository.count_chunk_embeddings(model=LOCAL_EMBEDDING_MODEL) == 1
-    assert repository.get_chunk_embedding(chunks[0].id, model=LOCAL_EMBEDDING_MODEL) is not None
+    embedding = repository.get_chunk_embedding(chunks[0].id, model=LOCAL_EMBEDDING_MODEL)
+    assert embedding is not None
+    assert embedding.vector_id == f"{LOCAL_EMBEDDING_MODEL}:{chunks[0].id}"
     refreshed_search = search_retrieval(RetrievalSearchRequest(query="trabalho"), repository)
     stale_search = search_retrieval(RetrievalSearchRequest(query="responsabilidade civil"), repository)
     assert refreshed_search.results

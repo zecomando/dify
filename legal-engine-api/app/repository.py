@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 
-SCHEMA_VERSION = "0003_answer_feedback_category"
+SCHEMA_VERSION = "0004_chunk_vector_ids"
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
@@ -148,6 +148,7 @@ class LegalChunkEmbeddingRecord:
     model: str
     dimensions: int
     vector: tuple[float, ...]
+    vector_id: str | None
     created_at: str
     updated_at: str
 
@@ -287,6 +288,7 @@ class LegalRepository:
                     model TEXT NOT NULL,
                     dimensions INTEGER NOT NULL,
                     vector_json TEXT NOT NULL,
+                    vector_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -415,6 +417,10 @@ class LegalRepository:
             )
             _ensure_column(connection, self.backend, "answer_feedback", "category", "TEXT")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_answer_feedback_category ON answer_feedback(category)")
+            _ensure_column(connection, self.backend, "legal_chunk_embeddings", "vector_id", "TEXT")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_legal_chunk_embeddings_vector_id ON legal_chunk_embeddings(vector_id)"
+            )
             _record_schema_migrations_from_files(connection)
             _record_schema_migration(connection, SCHEMA_VERSION)
 
@@ -507,6 +513,7 @@ class LegalRepository:
         model: str,
         dimensions: int,
         vector: tuple[float, ...],
+        vector_id: str,
         timestamp: str,
     ) -> LegalChunkEmbeddingRecord:
         vector_json = json.dumps(list(vector), ensure_ascii=False)
@@ -518,22 +525,25 @@ class LegalRepository:
                     model,
                     dimensions,
                     vector_json,
+                    vector_id,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(chunk_id) DO UPDATE SET
                     model = excluded.model,
                     dimensions = excluded.dimensions,
                     vector_json = excluded.vector_json,
+                    vector_id = excluded.vector_id,
                     updated_at = excluded.updated_at
                 """,
-                (chunk_id, model, dimensions, vector_json, timestamp, timestamp),
+                (chunk_id, model, dimensions, vector_json, vector_id, timestamp, timestamp),
             )
         return LegalChunkEmbeddingRecord(
             chunk_id=chunk_id,
             model=model,
             dimensions=dimensions,
             vector=vector,
+            vector_id=vector_id,
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -552,6 +562,7 @@ class LegalRepository:
                     model,
                     dimensions,
                     vector_json,
+                    vector_id,
                     created_at,
                     updated_at
                 FROM legal_chunk_embeddings
@@ -1760,8 +1771,9 @@ def _chunk_embedding_from_row(row: sqlite3.Row | tuple[object, ...]) -> LegalChu
         model=str(row[1]),
         dimensions=int(row[2]),
         vector=vector,
-        created_at=str(row[4]),
-        updated_at=str(row[5]),
+        vector_id=str(row[4]) if row[4] is not None else None,
+        created_at=str(row[5]),
+        updated_at=str(row[6]),
     )
 
 

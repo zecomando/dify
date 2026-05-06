@@ -69,8 +69,11 @@ Critério de saída:
 Objetivo: aproximar retrieval de beta sem perder determinismo nos testes.
 
 - Criar interface `EmbeddingProvider`.
+- Criar interface `VectorStore`.
+- Criar interface `RerankerProvider`.
 - Implementar provider local determinístico de embeddings.
-- Persistir embeddings por chunk em SQLite.
+- Persistir embeddings por chunk em SQLite com `vector_id`.
+- Implementar `LocalVectorStore` e reranker local por score.
 - Implementar fusão lexical + dense.
 - Manter fallback lexical para testes e modo degradado.
 - Preparar adapter OpenAI/BGE embeddings e Pinecone/Qdrant para staging.

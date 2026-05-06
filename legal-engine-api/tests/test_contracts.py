@@ -80,6 +80,7 @@ def test_openapi_contract_exposes_legal_metadata_in_core_models():
     schemas = _openapi_contract()["components"]["schemas"]
 
     assert "legal_metadata" in schemas["RetrievalResult"]["properties"]
+    assert "vector_id" in schemas["RetrievalResult"]["properties"]
     assert "legal_metadata" in schemas["EvidenceItem"]["properties"]
     assert "legal_metadata" in schemas["IngestionSourceRequest"]["properties"]
     assert "legal_metadata" in schemas["LegalDocumentResponse"]["properties"]

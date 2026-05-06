@@ -77,7 +77,7 @@ O backlog abaixo distingue:
 
 **Objetivo:** criar corpus inicial legislativo.
 
-**Estado local:** ingestão manual/crawl inicial implementada com persistência de texto bruto, chunking determinístico, embeddings locais, reindexação a partir do bruto e promoção para `chat_ready` apenas quando há chunks e requisitos da source policy. Corpus inicial determinístico seedável via `legal-seed` e `POST /admin/corpus/seed` implementado para demo local. Corpus real ampliado de produção continua pendente.
+**Estado local:** ingestão manual/crawl inicial implementada com persistência de texto bruto, chunking determinístico, embeddings locais com `vector_id`, reindexação a partir do bruto e promoção para `chat_ready` apenas quando há chunks e requisitos da source policy. Corpus inicial determinístico seedável via `legal-seed` e `POST /admin/corpus/seed` implementado para demo local. Corpus real ampliado de produção continua pendente.
 
 **Concluído localmente:**
 
@@ -86,8 +86,9 @@ O backlog abaixo distingue:
 - Chunking por artigo.
 - Persistência de bruto.
 - Promoção controlada por source policy.
-- Reindexação local a partir do bruto.
+- Reindexação local a partir do bruto, com aviso operacional quando documentos são saltados por falta de texto bruto persistido.
 - Embeddings locais determinísticos por chunk.
+- `vector_id` persistido por chunk embedding.
 
 **Pendente beta/produção:**
 
@@ -103,12 +104,14 @@ O backlog abaixo distingue:
 
 **Objetivo:** recuperar evidências juridicamente relevantes.
 
-**Estado local:** retrieval híbrido local implementado com embeddings determinísticos em SQLite, fusão dense/sparse e filtros de jurisdição, tipo documental, vigência e área quando aplicável. Vector store externo e Cohere Rerank continuam pendentes.
+**Estado local:** retrieval híbrido local implementado com interfaces `EmbeddingProvider`, `VectorStore` e `RerankerProvider`, embeddings determinísticos em SQLite, `LocalVectorStore`, rerank local por score, fusão dense/sparse e filtros de jurisdição, tipo documental, vigência e área quando aplicável. Vector store externo e Cohere Rerank continuam pendentes.
 
 **Concluído localmente:**
 
 - Implementar lexical/sparse search.
 - Implementar dense search local determinística.
+- Implementar `LocalVectorStore`.
+- Implementar `RerankerProvider` local por score.
 - Fundir lexical + dense.
 - Aplicar filtros.
 

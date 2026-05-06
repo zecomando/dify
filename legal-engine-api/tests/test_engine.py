@@ -56,6 +56,30 @@ def test_rerank_results_orders_by_score_and_limits_top_n():
     assert [item.chunk_id for item in result.results] == ["high"]
 
 
+def test_rerank_results_accepts_provider_interface():
+    class ChunkIdRerankerProvider:
+        model_name = "test-reranker"
+
+        def rerank(
+            self,
+            *,
+            query: str,
+            results: tuple[RetrievalResult, ...],
+            top_n: int,
+        ) -> tuple[RetrievalResult, ...]:
+            return tuple(sorted(results, key=lambda result: result.chunk_id)[:top_n])
+
+    low_score = _official_result(chunk_id="a-low-score", score=0.1)
+    high_score = _official_result(chunk_id="b-high-score", score=0.9)
+
+    result = rerank_results(
+        RerankRequest(query="teste", results=[high_score, low_score], top_n=1),
+        provider=ChunkIdRerankerProvider(),
+    )
+
+    assert [item.chunk_id for item in result.results] == ["a-low-score"]
+
+
 def test_build_evidence_keeps_only_official_authorities_and_warns():
     official = _official_result()
     blocked = RetrievalResult(

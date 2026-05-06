@@ -319,9 +319,9 @@ def reindex_corpus(payload: ReindexRequest, repository: LegalRepository) -> Inge
         reindexed_document_ids.append(document.id)
 
     status = IngestionJobStatus.COMPLETED if reindexed_document_ids else IngestionJobStatus.REJECTED
-    error_message = (
-        _reindex_error_message(documents, skipped_document_ids) if status == IngestionJobStatus.REJECTED else None
-    )
+    error_message = _reindex_error_message(documents, skipped_document_ids)
+    if status == IngestionJobStatus.COMPLETED and not skipped_document_ids:
+        error_message = None
     job = IngestionJobRecord(
         id=str(uuid4()),
         source=payload.source or "all",
@@ -406,5 +406,8 @@ def _reindex_error_message(documents: tuple[LegalDocumentRecord, ...], skipped_d
     if not documents:
         return "No documents matched the reindex request."
     if skipped_document_ids:
-        return f"No documents could be reindexed. Missing or empty raw text for: {', '.join(skipped_document_ids)}."
+        formatted_document_ids = ", ".join(skipped_document_ids)
+        if len(skipped_document_ids) == len(documents):
+            return f"No documents could be reindexed. Missing or empty raw text for: {formatted_document_ids}."
+        return f"Skipped documents without raw text: {formatted_document_ids}."
     return "No documents could be reindexed."

@@ -83,8 +83,8 @@ Serviço FastAPI próprio.
 Responsável por:
 
 - Classificação de área jurídica.
-- Retrieval.
-- Reranking.
+- Retrieval via `EmbeddingProvider` e `VectorStore` substituíveis.
+- Reranking via `RerankerProvider` substituível.
 - Construção de evidência.
 - Validação anti-alucinação.
 - Política de fontes.

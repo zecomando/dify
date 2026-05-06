@@ -69,6 +69,7 @@ Definir procedimentos operacionais para manter o serviço disponível, seguro, a
 6. Executar `legal-demo` antes de abrir o Dify.
 7. Importar `docs/legal-ai/dify-chat-answer.yml` no Dify.
 8. Executar os smoke tests do chat no Dify.
+9. Em staging PostgreSQL, executar `legal-readiness --require-admin-token --require-postgresql --database-url $env:LEGAL_ENGINE_DATABASE_URL`.
 
 ## PostgreSQL local-first
 
@@ -100,7 +101,7 @@ uv run --project legal-engine-api legal-db-migrate --database-url $env:LEGAL_ENG
 uv run --project legal-engine-api legal-seed --database-url $env:LEGAL_ENGINE_DATABASE_URL --json
 uv run --project legal-engine-api legal-demo --database-url $env:LEGAL_ENGINE_DATABASE_URL
 uv run --project legal-engine-api legal-eval --database-url $env:LEGAL_ENGINE_DATABASE_URL
-uv run --project legal-engine-api legal-readiness --database-url $env:LEGAL_ENGINE_DATABASE_URL --require-admin-token
+uv run --project legal-engine-api legal-readiness --database-url $env:LEGAL_ENGINE_DATABASE_URL --require-admin-token --require-postgresql
 ```
 
 ### Backup e restore locais
@@ -331,6 +332,7 @@ Ação:
 
 - Verificar jobs de ingestão.
 - Em operação local sem FastAPI, usar `legal-ingestion-jobs --status rejected --json` para rever erros e documentos associados.
+- Rever também jobs `completed` de modo `reindex` com `error_message`, porque indicam reindexação parcial com documentos saltados por falta de texto bruto persistido.
 - Verificar custos.
 - Verificar alertas.
 - Verificar falhas de validação.

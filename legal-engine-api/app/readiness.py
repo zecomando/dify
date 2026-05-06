@@ -39,6 +39,7 @@ def run_readiness(
     n8n_workflows_dir: Path,
     require_admin_token: bool,
     admin_token: str | None,
+    require_postgresql: bool = False,
     run_seed: bool = True,
     run_demo_check: bool = True,
     run_eval_check: bool = True,
@@ -49,6 +50,18 @@ def run_readiness(
     repository = LegalRepository(database_path, database_url)
     source_policy = SourcePolicy.from_file(source_policy_path)
     checks.append(ReadinessCheckResult("database_migration", True, f"schema ready on {repository.backend}"))
+    if require_postgresql:
+        checks.append(
+            ReadinessCheckResult(
+                "postgresql_required",
+                repository.backend == "postgresql",
+                (
+                    "configured via LEGAL_ENGINE_DATABASE_URL or --database-url"
+                    if repository.backend == "postgresql"
+                    else "requires LEGAL_ENGINE_DATABASE_URL or --database-url for staging"
+                ),
+            )
+        )
     checks.append(
         ReadinessCheckResult(
             "source_policy",
@@ -165,6 +178,7 @@ def main() -> int:
         help="Path to docs/legal-ai/n8n workflow exports.",
     )
     parser.add_argument("--require-admin-token", action="store_true")
+    parser.add_argument("--require-postgresql", action="store_true")
     parser.add_argument("--skip-seed", action="store_true")
     parser.add_argument("--skip-demo", action="store_true")
     parser.add_argument("--skip-eval", action="store_true")
@@ -182,6 +196,7 @@ def main() -> int:
         n8n_workflows_dir=args.n8n_workflows_dir,
         require_admin_token=args.require_admin_token,
         admin_token=settings.admin_token,
+        require_postgresql=args.require_postgresql,
         run_seed=not args.skip_seed,
         run_demo_check=not args.skip_demo,
         run_eval_check=not args.skip_eval,

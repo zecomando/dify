@@ -66,9 +66,10 @@ Run the readiness gates without paid providers:
 ```bash
 uv run --project legal-engine-api legal-readiness
 uv run --project legal-engine-api legal-readiness --require-admin-token --database-url "$LEGAL_ENGINE_DATABASE_URL"
+uv run --project legal-engine-api legal-readiness --require-admin-token --require-postgresql --database-url "$LEGAL_ENGINE_DATABASE_URL"
 ```
 
-The command checks schema initialization, source policy loading, optional admin token presence, seed, deterministic demo, and evaluation gates.
+The command checks schema initialization, source policy loading, optional admin token presence, seed, deterministic demo, and evaluation gates. Use `--require-postgresql` for staging gates that must fail unless `LEGAL_ENGINE_DATABASE_URL` or `--database-url` selects PostgreSQL.
 
 Run a traceable local/staging smoke report when you need canonical `audit_id` values, a persisted `evaluation_run_id`, seed counts, and diagnostics in one output:
 
@@ -87,7 +88,7 @@ uv run --project legal-engine-api legal-n8n-validate
 
 ## Local MVP status
 
-The local MVP path is deterministic and runs without external LLM, embedding, rerank, or vector database providers. Local hash embeddings are persisted in SQLite and combined with lexical retrieval for hybrid search. Documents are only promoted to `chat_ready` when they have persisted chunks and satisfy the configured source-policy requirements for document type, required metadata, and required legal identifiers. Manual and admin promotion use the same safe promotion rules.
+The local MVP path is deterministic and runs without external LLM, embedding, rerank, or vector database providers. Local hash embeddings are persisted in SQLite with stable vector IDs and combined with lexical retrieval through replaceable embedding/vector store/rerank interfaces. Documents are only promoted to `chat_ready` when they have persisted chunks and satisfy the configured source-policy requirements for document type, required metadata, and required legal identifiers. Manual and admin promotion use the same safe promotion rules.
 
 Validated locally with:
 
@@ -152,6 +153,7 @@ uv run --project legal-engine-api legal-ingestion-jobs --status rejected --json
 ```
 
 Use `--status`, `--mode`, `--source`, `--limit`, and `--offset` to investigate failed or pending ingestion work.
+Reindex jobs may finish as `completed` while still carrying an `error_message` when some requested documents were skipped because no raw text was persisted for them.
 
 Negative answer feedback can be triaged with answer audit context:
 

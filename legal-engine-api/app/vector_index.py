@@ -4,9 +4,10 @@ import hashlib
 import math
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Protocol
 
-from app.repository import LegalChunkRecord, LegalRepository, utc_now_iso
+from app.repository import LegalChunkRecord, LegalRepository, SearchableChunkRecord, utc_now_iso
 
 LOCAL_EMBEDDING_MODEL = "legal-local-hash-embedding-v1"
 LOCAL_EMBEDDING_DIMENSIONS = 64
@@ -17,6 +18,16 @@ class EmbeddingProvider(Protocol):
     dimensions: int
 
     def embed(self, text: str) -> tuple[float, ...]: ...
+
+
+class VectorStore(Protocol):
+    def search(
+        self,
+        *,
+        query_embedding: tuple[float, ...],
+        embedding_model: str,
+        current_only: bool,
+    ) -> tuple["VectorSearchResult", ...]: ...
 
 
 class LocalHashEmbeddingProvider:
@@ -33,6 +44,38 @@ class LocalHashEmbeddingProvider:
         return _normalize_vector(tuple(vector))
 
 
+@dataclass(frozen=True, slots=True)
+class VectorSearchResult:
+    chunk: SearchableChunkRecord
+    dense_score: float
+    vector_id: str | None
+
+
+class LocalVectorStore:
+    def __init__(self, repository: LegalRepository) -> None:
+        self.repository = repository
+
+    def search(
+        self,
+        *,
+        query_embedding: tuple[float, ...],
+        embedding_model: str,
+        current_only: bool,
+    ) -> tuple[VectorSearchResult, ...]:
+        results: list[VectorSearchResult] = []
+        for chunk in self.repository.list_searchable_chunks(current_only=current_only):
+            embedding = self.repository.get_chunk_embedding(chunk.chunk_id, model=embedding_model)
+            dense_score = cosine_similarity(query_embedding, embedding.vector) if embedding is not None else 0.0
+            results.append(
+                VectorSearchResult(
+                    chunk=chunk,
+                    dense_score=dense_score,
+                    vector_id=embedding.vector_id if embedding is not None else None,
+                )
+            )
+        return tuple(results)
+
+
 def index_chunk_embedding(
     repository: LegalRepository,
     chunk: LegalChunkRecord,
@@ -45,6 +88,7 @@ def index_chunk_embedding(
         model=embedding_provider.model_name,
         dimensions=embedding_provider.dimensions,
         vector=vector,
+        vector_id=_vector_id(embedding_provider.model_name, chunk.id),
         timestamp=utc_now_iso(),
     )
 
@@ -62,6 +106,7 @@ def index_chunk_embeddings(
             model=embedding_provider.model_name,
             dimensions=embedding_provider.dimensions,
             vector=embedding_provider.embed(chunk.text_content),
+            vector_id=_vector_id(embedding_provider.model_name, chunk.id),
             timestamp=timestamp,
         )
 
@@ -92,6 +137,10 @@ def _normalize_vector(vector: tuple[float, ...]) -> tuple[float, ...]:
     if norm == 0:
         return vector
     return tuple(value / norm for value in vector)
+
+
+def _vector_id(model_name: str, chunk_id: str) -> str:
+    return f"{model_name}:{chunk_id}"
 
 
 _SYNONYMS: dict[str, tuple[str, ...]] = {

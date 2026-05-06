@@ -66,12 +66,14 @@ A implementação local vive em `legal-engine-api/` e fornece:
 ## Staging mínimo
 
 1. Definir `LEGAL_ENGINE_ADMIN_TOKEN` com um valor secreto por ambiente.
-2. Subir `legal-engine-api` com `docker compose up --build` a partir de `legal-engine-api/`.
-3. Confirmar `GET /health`.
-4. Ingerir corpus inicial via `uv run --project legal-engine-api legal-seed` ou `POST /admin/corpus/seed`.
-5. Confirmar documentos em `/admin/documents` enviando `X-Admin-Token`.
-6. Importar `dify-chat-answer.yml` no Dify e validar o HTTP node para `/chat/answer`.
-7. Executar smoke Dify com pergunta respondível, pergunta-armadilha e pergunta sem corpus suficiente.
+2. Definir `LEGAL_ENGINE_DATABASE_URL` quando o ambiente deve usar PostgreSQL em vez de SQLite.
+3. Subir `legal-engine-api` com `docker compose up --build` a partir de `legal-engine-api/`.
+4. Confirmar `GET /health`.
+5. Ingerir corpus inicial via `uv run --project legal-engine-api legal-seed` ou `POST /admin/corpus/seed`.
+6. Confirmar documentos em `/admin/documents` enviando `X-Admin-Token`.
+7. Executar `uv run --project legal-engine-api legal-readiness --require-admin-token --require-postgresql --database-url "$LEGAL_ENGINE_DATABASE_URL"` quando o staging deve obrigatoriamente usar PostgreSQL.
+8. Importar `dify-chat-answer.yml` no Dify e validar o HTTP node para `/chat/answer`.
+9. Executar smoke Dify com pergunta respondível, pergunta-armadilha e pergunta sem corpus suficiente.
 
 ## Quality gates em CI
 

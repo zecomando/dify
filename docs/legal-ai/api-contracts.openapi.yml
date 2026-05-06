@@ -928,6 +928,8 @@ components:
           type: string
         score:
           type: number
+        vector_id:
+          type: string
     RerankRequest:
       type: object
       required:

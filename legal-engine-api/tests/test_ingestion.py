@@ -834,6 +834,43 @@ def test_reindex_corpus_rebuilds_chunks_from_raw_text(tmp_path: Path):
     assert [chunk.citation_label for chunk in chunks] == ["Artigo 1.º", "Artigo 2.º"]
 
 
+def test_reindex_corpus_reports_documents_skipped_without_raw_text(tmp_path: Path):
+    repository = _repository(tmp_path)
+    reindexable_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-civil",
+            raw_text="Artigo 1.º\nTexto inicial.",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+    skipped_response = ingest_source(
+        IngestionSourceRequest(
+            source_url="https://dre.pt/dre/legislacao-consolidada/codigo-do-trabalho",
+            promote_if_valid=True,
+        ),
+        _source_policy(),
+        repository,
+    )
+    reindexable_job = repository.get_job(reindexable_response.job_id)
+    skipped_job = repository.get_job(skipped_response.job_id)
+    assert reindexable_job is not None
+    assert reindexable_job.document_id is not None
+    assert skipped_job is not None
+    assert skipped_job.document_id is not None
+
+    reindex_response = reindex_corpus(
+        ReindexRequest(document_ids=[reindexable_job.document_id, skipped_job.document_id], force=True),
+        repository,
+    )
+
+    reindex_job = repository.get_job(reindex_response.job_id)
+    assert reindex_response.status == IngestionJobStatus.COMPLETED
+    assert reindex_job is not None
+    assert reindex_job.error_message == f"Skipped documents without raw text: {skipped_job.document_id}."
+
+
 def test_ingest_source_persists_chunks_from_raw_text(tmp_path: Path):
     repository = _repository(tmp_path)
     response = ingest_source(

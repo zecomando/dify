@@ -86,6 +86,7 @@ class RetrievalResult(BaseModel):
     source_url: str
     text: str = Field(min_length=1)
     score: float = 0.0
+    vector_id: str | None = None
     jurisdiction: str | None = None
     document_type: str | None = None
     area: list[str] = Field(default_factory=list)
