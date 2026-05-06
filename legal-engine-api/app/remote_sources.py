@@ -301,12 +301,12 @@ def _portuguese_case_law_metadata(source_url: str, raw_text: str, source: str) -
 def _curia_case_law_metadata(source_url: str, raw_text: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
     court = _first_match((r"(?m)^Court:[ \t]*([^\n]+)", r"\b(Court of Justice)\b"), raw_text)
-    case_number = _first_match((r"(?m)^Case(?:\s+No\.?)?:?[ \t]*([A-Z]-[0-9]+/[0-9]+)",), raw_text)
+    case_number = _first_match(("(?m)^Case(?:\\s+No\\.?)?:?[ \\t]*([A-Z][-‐‑‒–—−][0-9]+/[0-9]+)",), raw_text)
     decision_date = _first_match((r"(?m)^Date:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",), raw_text)
     if court:
         metadata["court"] = court.strip().rstrip(".")
     if case_number:
-        metadata["case_number"] = case_number.strip().rstrip(".")
+        metadata["case_number"] = _normalize_case_number(case_number)
     if decision_date:
         metadata["decision_date"] = decision_date
     if source_url:
@@ -337,6 +337,12 @@ def _normalize_iso_date(value: str) -> str:
         day, month, year = portuguese_date.groups()
         return f"{year}-{month}-{day}"
     return normalized
+
+
+def _normalize_case_number(value: str) -> str:
+    return (
+        value.strip().rstrip(".").translate(str.maketrans({"‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-", "−": "-"}))
+    )
 
 
 def _case_law_area(raw_text: str, source: str) -> str:

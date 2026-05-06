@@ -982,6 +982,34 @@ def test_crawl_url_fetches_and_ingests_curia_case_law(tmp_path: Path):
     assert document.legal_metadata["decision_date"] == "2020-07-16"
 
 
+def test_crawl_url_normalizes_curia_unicode_case_number_hyphen(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://curia.europa.eu/juris/document/document.jsf?text=&docid=123456"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Judgment of the Court</h1>
+            <p>Court: Court of Justice</p>
+            <p>Case C‑311/18</p>
+            <p>Date: 2020-07-16</p>
+            <p>Protection of personal data and transfers to third countries.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["case_number"] == "C-311/18"
+
+
 def test_crawl_url_fetches_and_ingests_infocuria_case_law(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(
