@@ -218,20 +218,28 @@ def crawl_url(
 
     remote_fetcher = fetcher or UrllibRemoteFetcher()
     fetch_error: RemoteFetchError | None = None
+    fetch_attempts_made = 0
+    permanent_fetch_error = False
     try:
         fetched_source = None
         for _ in range(payload.fetch_attempts):
+            fetch_attempts_made += 1
             try:
                 fetched_source = remote_fetcher.fetch(payload.url)
                 break
             except PermanentRemoteFetchError as exc:
                 fetch_error = exc
+                permanent_fetch_error = True
                 break
             except RemoteFetchError as exc:
                 fetch_error = exc
         if fetched_source is None:
             if fetch_error is None:
                 raise RemoteFetchError("Remote fetch failed.")
+            if not permanent_fetch_error and fetch_attempts_made > 1:
+                raise RemoteFetchError(
+                    f"Remote fetch failed after {fetch_attempts_made} attempts: {fetch_error}"
+                ) from fetch_error
             raise fetch_error
         parsed_source = parse_remote_legal_source(
             source_url=payload.url,

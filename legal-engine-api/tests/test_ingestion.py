@@ -493,6 +493,33 @@ def test_crawl_url_retries_transient_remote_fetch_errors(tmp_path: Path):
     assert job.error_message is None
 
 
+def test_crawl_url_reports_exhausted_transient_fetch_attempts(tmp_path: Path):
+    repository = _repository(tmp_path)
+    fetcher = FlakyRemoteFetcher(
+        failures_before_success=3,
+        text="""
+        <html><body>
+        <h1>Código Civil</h1>
+        <h2>Artigo 1.º</h2>
+        <p>A responsabilidade civil depende dos pressupostos legais.</p>
+        </body></html>
+        """,
+    )
+
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil", fetch_attempts=3),
+        _source_policy(),
+        repository,
+        fetcher,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.REJECTED
+    assert fetcher.calls == 3
+    assert job is not None
+    assert job.error_message == "Remote fetch failed after 3 attempts: Temporary remote fetch failure."
+
+
 def test_crawl_url_does_not_retry_permanent_remote_fetch_errors(tmp_path: Path):
     repository = _repository(tmp_path)
     fetcher = PermanentErrorRemoteFetcher()
