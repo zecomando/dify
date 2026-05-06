@@ -241,10 +241,17 @@ def crawl_url(
                     f"Remote fetch failed after {fetch_attempts_made} attempts: {fetch_error}"
                 ) from fetch_error
             raise fetch_error
+        final_policy_result = source_policy.check_url(fetched_source.final_url)
+        if (
+            final_policy_result.status != SourcePolicyStatus.OFFICIAL_AUTHORITY
+            or not final_policy_result.may_ground_answer
+            or final_policy_result.authority is None
+        ):
+            raise ValueError(f"Final URL is not an approved official authority: {final_policy_result.reason}")
         parsed_source = parse_remote_legal_source(
-            source_url=payload.url,
+            source_url=fetched_source.final_url,
             fetched_text=fetched_source.text,
-            authority=policy_result.authority,
+            authority=final_policy_result.authority,
         )
     except (RemoteFetchError, ValueError) as exc:
         return _create_ingestion_job(

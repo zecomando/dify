@@ -31,15 +31,18 @@ def _repository(tmp_path: Path) -> LegalRepository:
 
 
 class FakeRemoteFetcher:
-    def __init__(self, text: str | None = None, error: Exception | None = None) -> None:
+    def __init__(self, text: str | None = None, error: Exception | None = None, final_url: str | None = None) -> None:
         self.text = text
         self.error = error
+        self.final_url = final_url
 
     def fetch(self, url: str) -> RemoteFetchResult:
         if self.error is not None:
             raise self.error
         assert self.text is not None
-        return RemoteFetchResult(final_url=url, status_code=200, content_type="text/html", text=self.text)
+        return RemoteFetchResult(
+            final_url=self.final_url or url, status_code=200, content_type="text/html", text=self.text
+        )
 
 
 class FlakyRemoteFetcher:
@@ -518,6 +521,35 @@ def test_crawl_url_reports_exhausted_transient_fetch_attempts(tmp_path: Path):
     assert fetcher.calls == 3
     assert job is not None
     assert job.error_message == "Remote fetch failed after 3 attempts: Temporary remote fetch failure."
+
+
+def test_crawl_url_rejects_redirect_to_non_authority_domain(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Código Civil</h1>
+            <h2>Artigo 1.º</h2>
+            <p>Texto aparentemente legal.</p>
+            </body></html>
+            """,
+            final_url="https://medium.com/legal/codigo-civil",
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.REJECTED
+    assert repository.count_documents() == 0
+    assert job is not None
+    assert (
+        job.error_message
+        == "Final URL is not an approved official authority: Domain matches blocked authority rule: medium.com."
+    )
 
 
 def test_crawl_url_does_not_retry_permanent_remote_fetch_errors(tmp_path: Path):

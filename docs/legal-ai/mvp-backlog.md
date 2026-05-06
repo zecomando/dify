@@ -85,7 +85,7 @@ O backlog abaixo distingue:
 - Seed de legislação UE.
 - Chunking por artigo.
 - Persistência de bruto.
-- Rejeição de fetch remoto não textual ou acima do limite configurado.
+- Rejeição de fetch remoto não textual, acima do limite configurado ou redirecionado para domínio não aprovado.
 - Promoção controlada por source policy.
 - Reindexação local a partir do bruto, com aviso operacional quando documentos são saltados por falta de texto bruto persistido.
 - Embeddings locais determinísticos por chunk.
