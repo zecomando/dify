@@ -809,6 +809,35 @@ def test_crawl_url_extracts_portuguese_court_from_title(tmp_path: Path):
     assert document.legal_metadata["process_number"] == "123/21.0T8PRT.P1"
 
 
+def test_crawl_url_extracts_portuguese_case_law_label_variants(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.dgsi.pt/jtrl.nsf/33182fc732316039802565fa00497eec/example"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Tribunal da Relação de Lisboa</h1>
+            <p>Proc. n.º: 456/22.0T8LSB.L1</p>
+            <p>Data do Acordão: 21/05/2024</p>
+            <p>Responsabilidade civil e contrato.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["court"] == "Tribunal da Relação de Lisboa"
+    assert document.legal_metadata["process_number"] == "456/22.0T8LSB.L1"
+    assert document.legal_metadata["decision_date"] == "2024-05-21"
+
+
 def test_crawl_url_case_law_can_be_promoted_after_human_review(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(

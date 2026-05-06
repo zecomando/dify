@@ -277,11 +277,11 @@ def _portuguese_case_law_metadata(source_url: str, raw_text: str, source: str) -
         ),
         raw_text,
     )
-    process_number = _first_match((r"(?m)^Processo(?:\s+n[.ººo]*)?:?[ \t]*([A-Z0-9./-]+)",), raw_text)
+    process_number = _first_match((r"(?m)^Proc(?:esso)?\.?(?:\s+n[.ººo]*)?:?[ \t]*([A-Z0-9./-]+)",), raw_text)
     decision_date = _first_match(
         (
-            r"(?m)^Data(?:\s+do\s+Acórdão)?[ \t]*:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",
-            r"(?m)^Data(?:\s+do\s+Acórdão)?[ \t]*:[ \t]*([0-9]{2}[/-][0-9]{2}[/-][0-9]{4})",
+            r"(?m)^Data(?:\s+do\s+Ac[óo]rdão)?[ \t]*:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",
+            r"(?m)^Data(?:\s+do\s+Ac[óo]rdão)?[ \t]*:[ \t]*([0-9]{2}[/-][0-9]{2}[/-][0-9]{4})",
         ),
         raw_text,
     )
