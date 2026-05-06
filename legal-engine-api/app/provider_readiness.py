@@ -13,6 +13,7 @@ class ProviderRequirement:
     paid: bool
     required_env_vars: tuple[str, ...]
     any_env_var_groups: tuple[tuple[str, ...], ...] = ()
+    alternative_env_var_groups: tuple[tuple[str, ...], ...] = ()
     optional_env_vars: tuple[str, ...] = ()
     notes: str = ""
 
@@ -57,19 +58,14 @@ PROVIDER_REQUIREMENTS: tuple[ProviderRequirement, ...] = (
         required_env_vars=("REDIS_URL",),
     ),
     ProviderRequirement(
-        name="Pinecone vector store",
+        name="Vector store",
         category="vector_store",
         required_for="external vector retrieval",
-        paid=True,
-        required_env_vars=("PINECONE_API_KEY", "PINECONE_INDEX_NAME"),
-    ),
-    ProviderRequirement(
-        name="Qdrant vector store",
-        category="vector_store",
-        required_for="external or self-hosted vector retrieval alternative",
         paid=False,
-        required_env_vars=("QDRANT_URL",),
+        required_env_vars=(),
+        alternative_env_var_groups=(("PINECONE_API_KEY", "PINECONE_INDEX_NAME"), ("QDRANT_URL",)),
         optional_env_vars=("QDRANT_API_KEY",),
+        notes="Configure Pinecone or Qdrant for provider-backed retrieval.",
     ),
     ProviderRequirement(
         name="OpenAI embeddings",
@@ -164,7 +160,15 @@ def _provider_item(requirement: ProviderRequirement, environment: Mapping[str, s
         for group in requirement.any_env_var_groups
         if not any(_has_value(environment.get(env_var)) for env_var in group)
     ]
-    missing_env_vars = tuple(missing_required_vars + missing_any_groups)
+    missing_alternatives: list[str] = []
+    if requirement.alternative_env_var_groups and not any(
+        all(_has_value(environment.get(env_var)) for env_var in group)
+        for group in requirement.alternative_env_var_groups
+    ):
+        missing_alternatives.append(
+            " or ".join(" and ".join(group) for group in requirement.alternative_env_var_groups)
+        )
+    missing_env_vars = tuple(missing_required_vars + missing_any_groups + missing_alternatives)
     return ProviderReadinessItem(
         name=requirement.name,
         category=requirement.category,
@@ -180,7 +184,12 @@ def _provider_item(requirement: ProviderRequirement, environment: Mapping[str, s
 
 def _known_env_vars(requirement: ProviderRequirement) -> tuple[str, ...]:
     any_group_vars = tuple(env_var for group in requirement.any_env_var_groups for env_var in group)
-    return tuple(dict.fromkeys(requirement.required_env_vars + any_group_vars + requirement.optional_env_vars))
+    alternative_group_vars = tuple(env_var for group in requirement.alternative_env_var_groups for env_var in group)
+    return tuple(
+        dict.fromkeys(
+            requirement.required_env_vars + any_group_vars + alternative_group_vars + requirement.optional_env_vars
+        )
+    )
 
 
 def _has_value(value: str | None) -> bool:
