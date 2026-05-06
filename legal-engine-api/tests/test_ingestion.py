@@ -724,6 +724,62 @@ def test_crawl_url_fetches_and_ingests_dgsi_case_law_with_required_metadata(tmp_
     assert document.legal_metadata["decision_date"] == "2024-01-11"
 
 
+def test_crawl_url_normalizes_portuguese_case_law_slash_date(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.dgsi.pt/jstj.nsf/954f0ce6ad9dd8b980256b5f003fa814/example"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Supremo Tribunal de Justiça</h1>
+            <p>Tribunal: Supremo Tribunal de Justiça</p>
+            <p>Processo: 123/20.0T8LSB.L1.S1</p>
+            <p>Data do Acórdão: 11/01/2024</p>
+            <p>Responsabilidade civil extracontratual.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["decision_date"] == "2024-01-11"
+
+
+def test_crawl_url_normalizes_portuguese_case_law_dash_date(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://www.tribunalconstitucional.pt/tc/acordaos/20240123.html"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão n.º 123/2024</h1>
+            <p>Tribunal Constitucional</p>
+            <p>Processo n.º 456/23</p>
+            <p>Data: 08-02-2024</p>
+            <p>Fiscalização concreta da constitucionalidade.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.legal_metadata["decision_date"] == "2024-02-08"
+
+
 def test_crawl_url_case_law_can_be_promoted_after_human_review(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(

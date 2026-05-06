@@ -271,7 +271,13 @@ def _portuguese_case_law_metadata(source_url: str, raw_text: str, source: str) -
     metadata: dict[str, str] = {}
     court = _first_match((r"(?m)^Tribunal:[ \t]*([^\n]+)", r"\b(Supremo Tribunal de Justiça)\b"), raw_text)
     process_number = _first_match((r"(?m)^Processo(?:\s+n[.ººo]*)?:?[ \t]*([A-Z0-9./-]+)",), raw_text)
-    decision_date = _first_match((r"(?m)^Data(?:\s+do\s+Acórdão)?:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",), raw_text)
+    decision_date = _first_match(
+        (
+            r"(?m)^Data(?:\s+do\s+Acórdão)?[ \t]*:[ \t]*([0-9]{4}-[0-9]{2}-[0-9]{2})",
+            r"(?m)^Data(?:\s+do\s+Acórdão)?[ \t]*:[ \t]*([0-9]{2}[/-][0-9]{2}[/-][0-9]{4})",
+        ),
+        raw_text,
+    )
     if source == "TRIBUNAL_CONSTITUCIONAL" and court is None:
         court = "Tribunal Constitucional"
     if court:
@@ -279,7 +285,7 @@ def _portuguese_case_law_metadata(source_url: str, raw_text: str, source: str) -
     if process_number:
         metadata["process_number"] = process_number.strip().rstrip(".")
     if decision_date:
-        metadata["decision_date"] = decision_date
+        metadata["decision_date"] = _normalize_iso_date(decision_date)
     if source_url:
         metadata["source_url"] = source_url
     return metadata
@@ -315,6 +321,15 @@ def _hudoc_case_law_metadata(source_url: str, raw_text: str) -> dict[str, str]:
     if source_url:
         metadata["source_url"] = source_url
     return metadata
+
+
+def _normalize_iso_date(value: str) -> str:
+    normalized = value.strip()
+    portuguese_date = re.fullmatch(r"([0-9]{2})[/-]([0-9]{2})[/-]([0-9]{4})", normalized)
+    if portuguese_date:
+        day, month, year = portuguese_date.groups()
+        return f"{year}-{month}-{day}"
+    return normalized
 
 
 def _case_law_area(raw_text: str, source: str) -> str:
