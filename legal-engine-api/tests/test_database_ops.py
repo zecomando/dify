@@ -43,8 +43,11 @@ def test_migrate_database_initializes_sqlite_schema_and_records_version(tmp_path
             "SELECT version FROM schema_migrations WHERE version = ?",
             (SCHEMA_VERSION,),
         ).fetchone()
+        audit_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(answer_audits)").fetchall()}
     assert "legal_documents" in tables
     assert "answer_feedback" in tables
+    assert "generator_prompt_version" in audit_columns
+    assert "validator_prompt_version" in audit_columns
     assert migration == (SCHEMA_VERSION,)
 
 

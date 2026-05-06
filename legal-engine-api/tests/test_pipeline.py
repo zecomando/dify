@@ -59,9 +59,13 @@ def test_answer_chat_passes_with_official_chat_ready_evidence(tmp_path: Path):
     assert audit is not None
     assert audit.user_query == "responsabilidade civil"
     assert audit.verdict == "pass"
+    assert audit.generator_prompt_version == "legal-deterministic-generator-v1"
+    assert audit.validator_prompt_version == "legal-deterministic-validator-v1"
     audit_response = answer_audit_to_response(audit)
     assert audit_response.final_answer == response.answer
     assert audit_response.evidence[0].citation_label == "Artigo 1.º"
+    assert audit_response.generator_prompt_version == "legal-deterministic-generator-v1"
+    assert audit_response.validator_prompt_version == "legal-deterministic-validator-v1"
 
 
 def test_answer_chat_abstains_when_no_official_evidence_exists(tmp_path: Path):

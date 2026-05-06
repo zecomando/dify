@@ -260,6 +260,8 @@ def test_chat_answer_endpoint_returns_validated_answer_from_persisted_chunks(tmp
     assert audit_payload["user_id"] == "user-1"
     assert audit_payload["verdict"] == "pass"
     assert audit_payload["evidence"][0]["citation_label"] == "Artigo 1.º"
+    assert audit_payload["generator_prompt_version"] == "legal-deterministic-generator-v1"
+    assert audit_payload["validator_prompt_version"] == "legal-deterministic-validator-v1"
 
 
 def test_admin_document_endpoints_list_get_chunks_and_update_status(tmp_path):

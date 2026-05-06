@@ -252,6 +252,8 @@ class AnswerAuditResponse(BaseModel):
     verdict: ValidatorVerdict
     model_generator: str | None = None
     model_validator: str | None = None
+    generator_prompt_version: str | None = None
+    validator_prompt_version: str | None = None
     embedding_model: str | None = None
     reranker_model: str | None = None
     latency_ms: int

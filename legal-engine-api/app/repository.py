@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 
-SCHEMA_VERSION = "0004_chunk_vector_ids"
+SCHEMA_VERSION = "0005_answer_prompt_versions"
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
@@ -189,6 +189,8 @@ class AnswerAuditRecord:
     verdict: str
     model_generator: str | None
     model_validator: str | None
+    generator_prompt_version: str | None
+    validator_prompt_version: str | None
     embedding_model: str | None
     reranker_model: str | None
     latency_ms: int
@@ -339,6 +341,8 @@ class LegalRepository:
                     verdict TEXT NOT NULL,
                     model_generator TEXT,
                     model_validator TEXT,
+                    generator_prompt_version TEXT,
+                    validator_prompt_version TEXT,
                     embedding_model TEXT,
                     reranker_model TEXT,
                     latency_ms INTEGER NOT NULL,
@@ -421,6 +425,8 @@ class LegalRepository:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_legal_chunk_embeddings_vector_id ON legal_chunk_embeddings(vector_id)"
             )
+            _ensure_column(connection, self.backend, "answer_audits", "generator_prompt_version", "TEXT")
+            _ensure_column(connection, self.backend, "answer_audits", "validator_prompt_version", "TEXT")
             _record_schema_migrations_from_files(connection)
             _record_schema_migration(connection, SCHEMA_VERSION)
 
@@ -667,12 +673,14 @@ class LegalRepository:
                     verdict,
                     model_generator,
                     model_validator,
+                    generator_prompt_version,
+                    validator_prompt_version,
                     embedding_model,
                     reranker_model,
                     latency_ms,
                     estimated_cost_usd,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     audit.id,
@@ -695,6 +703,8 @@ class LegalRepository:
                     audit.verdict,
                     audit.model_generator,
                     audit.model_validator,
+                    audit.generator_prompt_version,
+                    audit.validator_prompt_version,
                     audit.embedding_model,
                     audit.reranker_model,
                     audit.latency_ms,
@@ -1206,6 +1216,8 @@ class LegalRepository:
                     verdict,
                     model_generator,
                     model_validator,
+                    generator_prompt_version,
+                    validator_prompt_version,
                     embedding_model,
                     reranker_model,
                     latency_ms,
@@ -1265,6 +1277,8 @@ class LegalRepository:
                     verdict,
                     model_generator,
                     model_validator,
+                    generator_prompt_version,
+                    validator_prompt_version,
                     embedding_model,
                     reranker_model,
                     latency_ms,
@@ -1814,11 +1828,13 @@ def _answer_audit_from_row(row: sqlite3.Row | tuple[object, ...]) -> AnswerAudit
         verdict=str(row[17]),
         model_generator=str(row[18]) if row[18] is not None else None,
         model_validator=str(row[19]) if row[19] is not None else None,
-        embedding_model=str(row[20]) if row[20] is not None else None,
-        reranker_model=str(row[21]) if row[21] is not None else None,
-        latency_ms=int(row[22]),
-        estimated_cost_usd=float(row[23]),
-        created_at=str(row[24]),
+        generator_prompt_version=str(row[20]) if row[20] is not None else None,
+        validator_prompt_version=str(row[21]) if row[21] is not None else None,
+        embedding_model=str(row[22]) if row[22] is not None else None,
+        reranker_model=str(row[23]) if row[23] is not None else None,
+        latency_ms=int(row[24]),
+        estimated_cost_usd=float(row[25]),
+        created_at=str(row[26]),
     )
 
 

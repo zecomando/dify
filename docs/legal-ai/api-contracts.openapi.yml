@@ -1808,6 +1808,10 @@ components:
           type: string
         model_validator:
           type: string
+        generator_prompt_version:
+          type: string
+        validator_prompt_version:
+          type: string
         embedding_model:
           type: string
         reranker_model:

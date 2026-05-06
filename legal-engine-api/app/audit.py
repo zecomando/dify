@@ -19,6 +19,13 @@ from app.schemas import (
 )
 
 
+DETERMINISTIC_GENERATOR_MODEL = "deterministic-evidence-summarizer"
+DETERMINISTIC_VALIDATOR_MODEL = "deterministic-source-validator"
+DETERMINISTIC_RERANKER_MODEL = "deterministic-score-sort"
+GENERATOR_PROMPT_VERSION = "legal-deterministic-generator-v1"
+VALIDATOR_PROMPT_VERSION = "legal-deterministic-validator-v1"
+
+
 def build_answer_audit_record(
     *,
     payload: ChatAnswerRequest,
@@ -49,10 +56,12 @@ def build_answer_audit_record(
         confidence=_confidence(validation.verdict, len(evidence_response.evidence)),
         abstained=validation.verdict != ValidatorVerdict.PASS,
         verdict=validation.verdict.value,
-        model_generator="deterministic-evidence-summarizer",
-        model_validator="deterministic-source-validator",
+        model_generator=DETERMINISTIC_GENERATOR_MODEL,
+        model_validator=DETERMINISTIC_VALIDATOR_MODEL,
+        generator_prompt_version=GENERATOR_PROMPT_VERSION,
+        validator_prompt_version=VALIDATOR_PROMPT_VERSION,
         embedding_model=None,
-        reranker_model="deterministic-score-sort",
+        reranker_model=DETERMINISTIC_RERANKER_MODEL,
         latency_ms=latency_ms,
         estimated_cost_usd=0.0,
         created_at=utc_now_iso(),
@@ -81,6 +90,8 @@ def answer_audit_to_response(record: AnswerAuditRecord) -> AnswerAuditResponse:
         verdict=record.verdict,
         model_generator=record.model_generator,
         model_validator=record.model_validator,
+        generator_prompt_version=record.generator_prompt_version,
+        validator_prompt_version=record.validator_prompt_version,
         embedding_model=record.embedding_model,
         reranker_model=record.reranker_model,
         latency_ms=record.latency_ms,

@@ -87,6 +87,15 @@ def test_openapi_contract_exposes_legal_metadata_in_core_models():
     assert "legal_metadata" in schemas["LegalDocumentResponse"]["required"]
 
 
+def test_openapi_contract_exposes_prompt_versions_in_answer_audit():
+    schemas = _openapi_contract()["components"]["schemas"]
+
+    properties = schemas["AnswerAudit"]["properties"]
+
+    assert "generator_prompt_version" in properties
+    assert "validator_prompt_version" in properties
+
+
 def test_openapi_contract_includes_answer_feedback_endpoints():
     contract = _openapi_contract()
     paths = contract["paths"]
