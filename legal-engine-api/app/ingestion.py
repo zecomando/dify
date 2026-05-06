@@ -4,7 +4,13 @@ import hashlib
 from uuid import uuid4
 
 from app.chunking import chunk_text
-from app.remote_sources import RemoteFetcher, RemoteFetchError, UrllibRemoteFetcher, parse_remote_legal_source
+from app.remote_sources import (
+    PermanentRemoteFetchError,
+    RemoteFetcher,
+    RemoteFetchError,
+    UrllibRemoteFetcher,
+    parse_remote_legal_source,
+)
 from app.repository import IngestionJobRecord, LegalDocumentRecord, LegalRepository, utc_now_iso
 from app.schemas import (
     CrawlUrlRequest,
@@ -217,6 +223,9 @@ def crawl_url(
         for _ in range(payload.fetch_attempts):
             try:
                 fetched_source = remote_fetcher.fetch(payload.url)
+                break
+            except PermanentRemoteFetchError as exc:
+                fetch_error = exc
                 break
             except RemoteFetchError as exc:
                 fetch_error = exc

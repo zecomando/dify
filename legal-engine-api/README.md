@@ -108,7 +108,7 @@ curl http://127.0.0.1:8000/openapi.json
 ## Remote crawl MVP
 
 `POST /ingestion/crawl-url` validates the URL against `source-policy.yml`. For supported official DRE, EUR-Lex, DGSI, Tribunal Constitucional, Curia/InfoCuria, and HUDOC URLs, it fetches remote HTML/text, normalizes it into raw text, extracts basic legal metadata such as ELI, CELEX, court, decision date, process/case/application numbers, persists raw text/chunks/jobs, and promotes to `chat_ready` only when source-policy requirements pass.
-Remote fetch rejects unsupported non-text content types and responses larger than the configured byte limit instead of silently ingesting truncated or binary content.
+Remote fetch rejects unsupported non-text content types and responses larger than the configured byte limit instead of silently ingesting truncated or binary content. These permanent fetch errors are not retried.
 
 Tests use an injected fake fetcher and do not call live official websites.
 

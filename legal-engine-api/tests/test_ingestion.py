@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import get_repository
 from app.ingestion import crawl_url, ingest_source, promote_document, reindex_corpus
-from app.remote_sources import RemoteFetchError, RemoteFetchResult, UrllibRemoteFetcher
+from app.remote_sources import PermanentRemoteFetchError, RemoteFetchError, RemoteFetchResult, UrllibRemoteFetcher
 from app.main import app
 from app.repository import LegalRepository
 from app.schemas import (
@@ -52,6 +52,15 @@ class FlakyRemoteFetcher:
         if self.calls <= self.failures_before_success:
             raise RemoteFetchError("Temporary remote fetch failure.")
         return RemoteFetchResult(final_url=url, status_code=200, content_type="text/html", text=self.text)
+
+
+class PermanentErrorRemoteFetcher:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch(self, url: str) -> RemoteFetchResult:
+        self.calls += 1
+        raise PermanentRemoteFetchError("Unsupported remote content type: application/pdf.")
 
 
 class FakeUrlopenHeaders:
@@ -460,6 +469,24 @@ def test_crawl_url_retries_transient_remote_fetch_errors(tmp_path: Path):
     assert fetcher.calls == 2
     assert job is not None
     assert job.error_message is None
+
+
+def test_crawl_url_does_not_retry_permanent_remote_fetch_errors(tmp_path: Path):
+    repository = _repository(tmp_path)
+    fetcher = PermanentErrorRemoteFetcher()
+
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil", fetch_attempts=3),
+        _source_policy(),
+        repository,
+        fetcher,
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.REJECTED
+    assert fetcher.calls == 1
+    assert job is not None
+    assert job.error_message == "Unsupported remote content type: application/pdf."
 
 
 def test_crawl_url_fetches_and_ingests_eurlex_source_with_celex(tmp_path: Path):
