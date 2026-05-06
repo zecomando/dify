@@ -664,6 +664,33 @@ def test_crawl_url_extracts_encoded_eurlex_celex_from_url(tmp_path: Path):
     assert document.legal_metadata == {"celex": "32016R0679"}
 
 
+def test_crawl_url_extracts_eurlex_celex_query_parameter(tmp_path: Path):
+    repository = _repository(tmp_path)
+    response = crawl_url(
+        CrawlUrlRequest(url="https://eur-lex.europa.eu/legal-content/PT/TXT/?celex=32016R0679"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Regulamento Geral sobre a Proteção de Dados</h1>
+            <h2>Artigo 6.º</h2>
+            <p>O regulamento define bases de licitude para dados pessoais.</p>
+            </body></html>
+            """
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.status == "chat_ready"
+    assert document.legal_metadata == {"celex": "32016R0679"}
+
+
 def test_crawl_url_extracts_dre_eli_from_source_url(tmp_path: Path):
     repository = _repository(tmp_path)
     response = crawl_url(

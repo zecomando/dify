@@ -208,13 +208,14 @@ def _eurlex_metadata(source_url: str, raw_text: str) -> dict[str, str]:
     decoded_url = unquote(source_url)
     query_values = parse_qs(urlparse(source_url).query)
     uri_values = query_values.get("uri", ())
+    celex_values = tuple(f"CELEX:{value}" for value in query_values.get("celex", ()))
     celex = _first_match(
         (
             r"^CELEX:([0-9A-Z]+)$",
             r"[?&]uri=CELEX:([0-9A-Z]+)",
             r"CELEX[:\s]*([0-9][0-9A-Z]{4,})",
         ),
-        "\n".join((*uri_values, source_url, decoded_url, raw_text)),
+        "\n".join((*uri_values, *celex_values, source_url, decoded_url, raw_text)),
     )
     eli = _first_match((r"ELI[:\s]*([^\s,;]+)", r"/eli/([^\s?#]+)"), f"{source_url}\n{decoded_url}\n{raw_text}")
     if celex:
