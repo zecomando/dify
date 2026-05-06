@@ -552,6 +552,39 @@ def test_crawl_url_rejects_redirect_to_non_authority_domain(tmp_path: Path):
     )
 
 
+def test_crawl_url_uses_final_authority_policy_after_redirect(tmp_path: Path):
+    repository = _repository(tmp_path)
+
+    response = crawl_url(
+        CrawlUrlRequest(url="https://dre.pt/dre/legislacao-consolidada/codigo-civil"),
+        _source_policy(),
+        repository,
+        FakeRemoteFetcher(
+            """
+            <html><body>
+            <h1>Acórdão do Supremo Tribunal de Justiça</h1>
+            <p>Tribunal: Supremo Tribunal de Justiça</p>
+            <p>Processo: 123/20.0T8LSB.L1.S1</p>
+            <p>Data do Acórdão: 2024-01-11</p>
+            <p>Responsabilidade civil extracontratual.</p>
+            </body></html>
+            """,
+            final_url="https://www.dgsi.pt/jstj.nsf/954f0ce6ad9dd8b980256b5f003fa814/example",
+        ),
+    )
+
+    job = repository.get_job(response.job_id)
+    assert response.status == IngestionJobStatus.COMPLETED
+    assert job is not None
+    assert job.document_id is not None
+    document = repository.get_document(job.document_id)
+    assert document is not None
+    assert document.source == "DGSI"
+    assert document.status == "pending_review"
+    assert document.document_type == "case_law"
+    assert document.source_url == "https://www.dgsi.pt/jstj.nsf/954f0ce6ad9dd8b980256b5f003fa814/example"
+
+
 def test_crawl_url_does_not_retry_permanent_remote_fetch_errors(tmp_path: Path):
     repository = _repository(tmp_path)
     fetcher = PermanentErrorRemoteFetcher()

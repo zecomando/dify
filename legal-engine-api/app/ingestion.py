@@ -275,7 +275,7 @@ def crawl_url(
             legal_metadata=parsed_source.legal_metadata,
             promote_if_valid=parsed_source.promote_if_valid,
         ),
-        policy_result,
+        final_policy_result,
         repository,
         mode="crawl",
     )
