@@ -40,6 +40,7 @@ def run_readiness(
     require_admin_token: bool,
     admin_token: str | None,
     require_postgresql: bool = False,
+    require_provider_readiness: bool = False,
     run_seed: bool = True,
     run_demo_check: bool = True,
     run_eval_check: bool = True,
@@ -81,7 +82,7 @@ def run_readiness(
         checks.append(
             ReadinessCheckResult(
                 "provider_readiness",
-                True,
+                provider_result.status == "ready" or not require_provider_readiness,
                 (
                     f"configured={provider_result.configured_providers}/{provider_result.providers_total}, "
                     f"missing={provider_result.missing_providers}, "
@@ -179,6 +180,7 @@ def main() -> int:
     )
     parser.add_argument("--require-admin-token", action="store_true")
     parser.add_argument("--require-postgresql", action="store_true")
+    parser.add_argument("--require-provider-readiness", action="store_true")
     parser.add_argument("--skip-seed", action="store_true")
     parser.add_argument("--skip-demo", action="store_true")
     parser.add_argument("--skip-eval", action="store_true")
@@ -197,6 +199,7 @@ def main() -> int:
         require_admin_token=args.require_admin_token,
         admin_token=settings.admin_token,
         require_postgresql=args.require_postgresql,
+        require_provider_readiness=args.require_provider_readiness,
         run_seed=not args.skip_seed,
         run_demo_check=not args.skip_demo,
         run_eval_check=not args.skip_eval,
