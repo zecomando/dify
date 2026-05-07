@@ -7,6 +7,7 @@ from app.readiness import main, run_readiness
 POLICY_PATH = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "source-policy.yml"
 EVALS_DIR = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "evals"
 N8N_DIR = Path(__file__).resolve().parents[2] / "docs" / "legal-ai" / "n8n"
+ENV_EXAMPLE_PATH = Path(__file__).resolve().parents[1] / ".env.example"
 
 
 def test_run_readiness_can_check_database_policy_seed_and_demo_without_external_providers(tmp_path: Path):
@@ -26,6 +27,7 @@ def test_run_readiness_can_check_database_policy_seed_and_demo_without_external_
     assert {check.name for check in result.checks} == {
         "database_migration",
         "source_policy",
+        "env_example",
         "admin_token",
         "provider_readiness",
         "seed",
@@ -275,3 +277,72 @@ def test_readiness_cli_fails_json_when_provider_readiness_is_required_and_blocke
     assert '"passed": false' in captured.out
     assert '"name": "provider_readiness"' in captured.out
     assert "paid_blockers=1" in captured.out
+
+
+def test_run_readiness_fails_when_env_example_is_missing_required_provider_vars(tmp_path: Path):
+    env_example = tmp_path / ".env.example"
+    env_example.write_text(
+        "\n".join(
+            [
+                "LEGAL_ENGINE_DATABASE_PATH=.data/legal_engine.sqlite3",
+                "LEGAL_ENGINE_DATABASE_URL=",
+                "LEGAL_ENGINE_ADMIN_TOKEN=",
+                "LEGAL_SOURCE_POLICY_PATH=../docs/legal-ai/source-policy.yml",
+                "LEGAL_ENGINE_BASE_URL=http://127.0.0.1:8000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_readiness(
+        database_path=tmp_path / "readiness.sqlite3",
+        database_url=None,
+        source_policy_path=POLICY_PATH,
+        evals_dir=EVALS_DIR,
+        n8n_workflows_dir=N8N_DIR,
+        env_example_path=env_example,
+        require_admin_token=False,
+        admin_token=None,
+        run_seed=False,
+        run_demo_check=False,
+        run_eval_check=False,
+        run_n8n_check=False,
+        run_provider_check=False,
+    )
+
+    assert result.passed is False
+    env_example_check = next(check for check in result.checks if check.name == "env_example")
+    assert env_example_check.passed is False
+    assert "OPENAI_API_KEY" in env_example_check.message
+    assert "LANGFUSE_SECRET_KEY" in env_example_check.message
+
+
+def test_run_readiness_fails_when_env_example_contains_secret_like_values(tmp_path: Path):
+    secret_value = "sk-test-secret-value-that-must-not-be-in-template"
+    env_example = tmp_path / ".env.example"
+    env_example.write_text(
+        ENV_EXAMPLE_PATH.read_text(encoding="utf-8").replace("OPENAI_API_KEY=", f"OPENAI_API_KEY={secret_value}"),
+        encoding="utf-8",
+    )
+
+    result = run_readiness(
+        database_path=tmp_path / "readiness.sqlite3",
+        database_url=None,
+        source_policy_path=POLICY_PATH,
+        evals_dir=EVALS_DIR,
+        n8n_workflows_dir=N8N_DIR,
+        env_example_path=env_example,
+        require_admin_token=False,
+        admin_token=None,
+        run_seed=False,
+        run_demo_check=False,
+        run_eval_check=False,
+        run_n8n_check=False,
+        run_provider_check=False,
+    )
+
+    assert result.passed is False
+    env_example_check = next(check for check in result.checks if check.name == "env_example")
+    assert env_example_check.passed is False
+    assert "OPENAI_API_KEY" in env_example_check.message
+    assert secret_value not in env_example_check.message
