@@ -130,19 +130,31 @@ def _validate_nodes(nodes: Iterable[object]) -> list[str]:
             errors.append(f"Node {node_name or node_id or '<unknown>'} parameters must be an object.")
             continue
         if node_type == "n8n-nodes-base.httpRequest":
-            errors.extend(_validate_http_node(node_name or node_id or "<unknown>", parameters))
+            errors.extend(_validate_http_node(node_name or node_id or "<unknown>", node, parameters))
         if node_type == "n8n-nodes-base.code":
             errors.extend(_validate_code_node(node_name or node_id or "<unknown>", parameters))
     return errors
 
 
-def _validate_http_node(node_name: str, parameters: dict[str, object]) -> list[str]:
+def _validate_http_node(node_name: str, node: dict[object, object], parameters: dict[str, object]) -> list[str]:
     errors: list[str] = []
     url = parameters.get("url")
     if not isinstance(url, str) or "$env.LEGAL_ENGINE_BASE_URL" not in url:
         errors.append(f"HTTP node {node_name} must build url from $env.LEGAL_ENGINE_BASE_URL.")
     if isinstance(url, str) and _contains_literal_url(url):
         errors.append(f"HTTP node {node_name} must not contain a hardcoded absolute URL.")
+    options = parameters.get("options")
+    timeout = options.get("timeout") if isinstance(options, dict) else None
+    if not isinstance(timeout, int) or timeout <= 0:
+        errors.append(f"HTTP node {node_name} must set options.timeout to a positive integer.")
+    if node.get("retryOnFail") is not True:
+        errors.append(f"HTTP node {node_name} must enable retryOnFail.")
+    max_tries = node.get("maxTries")
+    if not isinstance(max_tries, int) or max_tries < 2:
+        errors.append(f"HTTP node {node_name} must set maxTries to at least 2.")
+    wait_between_tries = node.get("waitBetweenTries")
+    if not isinstance(wait_between_tries, int) or wait_between_tries <= 0:
+        errors.append(f"HTTP node {node_name} must set waitBetweenTries to a positive integer.")
     if isinstance(url, str) and "/admin/" in url:
         headers = _header_parameters(parameters)
         token_values = [value for name, value in headers if name.lower() == "x-admin-token"]

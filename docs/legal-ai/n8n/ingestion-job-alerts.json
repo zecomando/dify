@@ -54,6 +54,9 @@
       "name": "List Rejected Ingestion Jobs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "position": [
         520,
         0

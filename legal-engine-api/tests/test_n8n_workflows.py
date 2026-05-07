@@ -57,6 +57,50 @@ def test_validate_n8n_workflows_rejects_hardcoded_admin_url_and_token(tmp_path: 
     assert any("LEGAL_ENGINE_ADMIN_TOKEN" in error for error in summary.workflows[0].errors)
 
 
+def test_validate_n8n_workflows_rejects_http_nodes_without_timeout_and_retry_policy(tmp_path: Path):
+    workflows_dir = tmp_path / "n8n"
+    workflows_dir.mkdir()
+    (workflows_dir / "no-resilience-policy.json").write_text(
+        json.dumps(
+            {
+                "name": "No resilience policy",
+                "versionId": "no-resilience-policy-v1",
+                "nodes": [
+                    {
+                        "id": "list-jobs",
+                        "name": "List Jobs",
+                        "type": "n8n-nodes-base.httpRequest",
+                        "typeVersion": 4.2,
+                        "parameters": {
+                            "url": "={{ $env.LEGAL_ENGINE_BASE_URL + '/admin/ingestion/jobs' }}",
+                            "sendHeaders": True,
+                            "headerParameters": {
+                                "parameters": [
+                                    {
+                                        "name": "X-Admin-Token",
+                                        "value": "={{ $env.LEGAL_ENGINE_ADMIN_TOKEN }}",
+                                    }
+                                ]
+                            },
+                        },
+                    }
+                ],
+                "connections": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = validate_n8n_workflows(workflows_dir)
+
+    assert summary.passed is False
+    assert summary.workflows[0].passed is False
+    assert any("timeout" in error for error in summary.workflows[0].errors)
+    assert any("retryOnFail" in error for error in summary.workflows[0].errors)
+    assert any("maxTries" in error for error in summary.workflows[0].errors)
+    assert any("waitBetweenTries" in error for error in summary.workflows[0].errors)
+
+
 def test_n8n_workflows_cli_prints_json_result(monkeypatch, capsys):
     monkeypatch.setattr(
         "sys.argv",
