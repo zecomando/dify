@@ -24,6 +24,7 @@ uv run --project legal-engine-api ruff format --check app tests
 uv run --project legal-engine-api legal-seed
 uv run --project legal-engine-api legal-demo
 uv run --project legal-engine-api legal-smoke --json
+uv run --project legal-engine-api legal-pilot-readiness --json
 uv run --project legal-engine-api legal-n8n-validate
 uv run --project legal-engine-api legal-readiness --skip-eval
 uv run --project legal-engine-api uvicorn app.main:app --reload
@@ -79,6 +80,16 @@ uv run --project legal-engine-api legal-smoke --database-url "$LEGAL_ENGINE_DATA
 ```
 
 The smoke command seeds the corpus, runs the canonical chat cases, persists an evaluation run, and reports document/job/audit/evaluation counts without requiring paid providers.
+
+Run the closed-pilot gate after staging smoke/evaluation to capture the corpus freeze snapshot and block unresolved review/ingestion issues:
+
+```bash
+uv run --project legal-engine-api legal-pilot-readiness --json
+uv run --project legal-engine-api legal-pilot-readiness --database-url "$LEGAL_ENGINE_DATABASE_URL" --require-admin-token --require-postgresql --json
+uv run --project legal-engine-api legal-pilot-readiness --database-url "$LEGAL_ENGINE_DATABASE_URL" --require-admin-token --require-postgresql --pilot-area "Contratação pública" --freeze-output .data/legal-pilot-freeze.json --json
+```
+
+The pilot readiness command reports document, source, ingestion job, audit, feedback, evaluation, and review queue counts with freeze metadata. By default it requires at least 10 `chat_ready` documents, no unresolved `pending_review` documents, no rejected ingestion jobs, at least one answer audit, and at least one passed evaluation run. Use `--freeze-output` to persist the passing JSON artifact for the corpus freeze. Use `--allow-pending-review`, `--allow-rejected-jobs`, `--skip-answer-audit-check`, or `--skip-evaluation-check` only for pre-freeze diagnostics.
 
 The readiness command also validates the exported n8n workflows under `docs/legal-ai/n8n`. You can run that gate independently:
 
