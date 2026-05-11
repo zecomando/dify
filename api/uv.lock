@@ -239,7 +239,7 @@ wheels = [
 
 [[package]]
 name = "aliyun-log-python-sdk"
-version = "0.9.44"
+version = "0.9.46"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dateparser" },
@@ -251,7 +251,7 @@ dependencies = [
     { name = "requests" },
     { name = "six" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/5c/f4076b129fe9168f5424f9d89afc587baf36a844f4ae7b619a951a97c76c/aliyun_log_python_sdk-0.9.44.tar.gz", hash = "sha256:891d0ba91cdce8e5e6b430a50512e092751621680bc9f0b7c7325aaa7c1944f1", size = 154147, upload-time = "2026-03-30T08:40:59.04Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/20/0453695e70d2738bb393022739bfcef88d63236cc01887b8ce18eb2d137b/aliyun_log_python_sdk-0.9.46.tar.gz", hash = "sha256:b7377360f0af27a517a588ce650caf9b45a0254fe69ae957b11c24735e8699ba", size = 167434, upload-time = "2026-04-29T11:00:39.946Z" }
 
 [[package]]
 name = "aliyun-python-sdk-core"
@@ -1575,7 +1575,7 @@ vdb-xinference = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aliyun-log-python-sdk", specifier = ">=0.9.44,<1.0.0" },
+    { name = "aliyun-log-python-sdk", specifier = ">=0.9.46,<1.0.0" },
     { name = "azure-identity", specifier = ">=1.25.3,<2.0.0" },
     { name = "bleach", specifier = ">=6.3.0" },
     { name = "boto3", specifier = ">=1.42.96" },
@@ -1594,11 +1594,11 @@ requires-dist = [
     { name = "gmpy2", specifier = ">=2.3.0" },
     { name = "google-api-python-client", specifier = ">=2.194.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.148.1,<2.0.0" },
-    { name = "graphon", specifier = "~=0.2.2" },
+    { name = "graphon", specifier = "~=0.3.1" },
     { name = "gunicorn", specifier = ">=25.3.0" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.28.1,<1.0.0" },
     { name = "httpx-sse", specifier = "~=0.4.0" },
-    { name = "json-repair", specifier = "~=0.59.4" },
+    { name = "json-repair", specifier = "~=0.59.6" },
     { name = "opentelemetry-distro", specifier = ">=0.62b1,<1.0.0" },
     { name = "opentelemetry-instrumentation-celery", specifier = ">=0.62b0,<1.0.0" },
     { name = "opentelemetry-instrumentation-flask", specifier = ">=0.62b0,<1.0.0" },
@@ -1611,7 +1611,7 @@ requires-dist = [
     { name = "python-socketio", specifier = ">=5.13.0" },
     { name = "readabilipy", specifier = ">=0.3.0,<1.0.0" },
     { name = "redis", extras = ["hiredis"], specifier = ">=7.4.0" },
-    { name = "resend", specifier = ">=2.27.0,<3.0.0" },
+    { name = "resend", specifier = ">=2.30.0,<3.0.0" },
     { name = "sendgrid", specifier = ">=6.12.5" },
     { name = "sseclient-py", specifier = ">=1.8.0" },
 ]
@@ -2010,7 +2010,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "opensearch-py", specifier = "==3.1.0" },
-    { name = "tenacity", specifier = ">=8.0.0" },
+    { name = "tenacity", specifier = ">=9.1.4" },
 ]
 
 [[package]]
@@ -2937,7 +2937,7 @@ httpx = [
 
 [[package]]
 name = "graphon"
-version = "0.2.2"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "charset-normalizer" },
@@ -2958,9 +2958,9 @@ dependencies = [
     { name = "unstructured", extra = ["docx", "epub", "md", "ppt", "pptx"] },
     { name = "webvtt-py" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/50/e745a79c5f742f88f6011a1f7c9ba2c2f9cc1beedd982f0b192f1ab8c748/graphon-0.2.2.tar.gz", hash = "sha256:141f0de536171850f1af6f738dc66f0285aadd3c097f1dad2a038636789e0aa5", size = 236360, upload-time = "2026-04-17T08:52:28.047Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/ef/43217842e84160acca64a95858f1689389a50e04a53fc94f2aa836b4eaf7/graphon-0.3.1.tar.gz", hash = "sha256:49971baed1eb16c8e1983f755e659902e4f117a68dc62fad19e91472950b937d", size = 242210, upload-time = "2026-05-07T06:58:21.879Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/89/a6340afdaf5169d17a318e00fc685fb67ed99baa602c2cbbbf6af6a76096/graphon-0.2.2-py3-none-any.whl", hash = "sha256:754e544d08779138f99eac6547ab08559463680e2c76488b05e1c978210392b4", size = 340808, upload-time = "2026-04-17T08:52:26.5Z" },
+    { url = "https://files.pythonhosted.org/packages/62/37/bef16ed3d6da7446b36769fa388f4dc79f95337ffa16d6dfc3177152507e/graphon-0.3.1-py3-none-any.whl", hash = "sha256:e6422c7e3f1ce7d2185979c17e08201816ca25d46d400ebdd035c95d501c04fe", size = 349368, upload-time = "2026-05-07T06:58:20.217Z" },
 ]
 
 [[package]]
@@ -3494,11 +3494,11 @@ wheels = [
 
 [[package]]
 name = "json-repair"
-version = "0.59.4"
+version = "0.59.6"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/32/41/4ae9c6e711647a41b4e0c04bce815113ce9c0286eff6dc6fb86979b2fb9f/json_repair-0.59.4.tar.gz", hash = "sha256:559ca1828f6f566530663cd96d64bee29f8282b9d2ff0e661e05fa87b4171ab3", size = 47624, upload-time = "2026-04-15T06:48:40.776Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b1/c9/7a8890d15b6b0bd215693d1f5ec09f23284cc2e4e044a20174d8e5026d40/json_repair-0.59.6.tar.gz", hash = "sha256:747948f5342ff0de28a5467d25b4ed4690291362311eb936752473345f7a2f51", size = 48854, upload-time = "2026-05-10T05:24:53.771Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/c4/ec3068436d2275731539b7a43fbc947f502bc3fe149856a5d00368c7b087/json_repair-0.59.4-py3-none-any.whl", hash = "sha256:46052e646bc0b0c39db672ebbf732f774f3c1a5bde81a54f0b0e19d3af4f45cd", size = 46697, upload-time = "2026-04-15T06:48:39.61Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/db/bb4757af1854e035d9f1b8c99c254d4d6bc4996ef6abeabb4f50e7439a07/json_repair-0.59.6-py3-none-any.whl", hash = "sha256:9a5b4e485932ade35e14e8a61b1c14e6bd5230c72b1384dfe25f8c8032f30567", size = 47525, upload-time = "2026-05-10T05:24:52.016Z" },
 ]
 
 [[package]]
@@ -5827,15 +5827,15 @@ wheels = [
 
 [[package]]
 name = "resend"
-version = "2.27.0"
+version = "2.30.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/da/3d342cacbde7143e36782243caa3715d9e49cadb43e804419493c784869b/resend-2.27.0.tar.gz", hash = "sha256:abc183da7566c1fdba8221ec5acd9f954c2ff516a0c2615bee2a41bc9db3e277", size = 37177, upload-time = "2026-04-01T21:19:31.823Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/b5/dffc1acd852c708c48626d064a54c83acf0f6c8f097efc14e3b5c3a3ad99/resend-2.30.0.tar.gz", hash = "sha256:4c3c634316ad1a1fe7c5453afdd560c7d318ba18960149a8159f3bed334eb386", size = 43201, upload-time = "2026-05-04T16:23:43.203Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/95/783b09d24c8f40b900a2728b67fd3c1401d4a6afcdf1db1c8475c249559d/resend-2.27.0-py2.py3-none-any.whl", hash = "sha256:5bc8ddebb0418127fc3e47eb29ab72af727861481c4b051b96cb693df8f8dc40", size = 59831, upload-time = "2026-04-01T21:19:30.471Z" },
+    { url = "https://files.pythonhosted.org/packages/92/05/c1114a7d29e0543d815cb9b5ac0f00b6ea7bb65507d952f2896d61acdc2b/resend-2.30.0-py2.py3-none-any.whl", hash = "sha256:a8993ad6be911b039f86d5853bb2b478cc2aa66c82f1829f0b1b2e0753cf09c4", size = 68388, upload-time = "2026-05-04T16:23:42.172Z" },
 ]
 
 [[package]]
@@ -6361,11 +6361,11 @@ wheels = [
 
 [[package]]
 name = "tenacity"
-version = "9.1.2"
+version = "9.1.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0a/d4/2b0cd0fe285e14b36db076e78c93766ff1d529d70408bd1d2a5a84f1d929/tenacity-9.1.2.tar.gz", hash = "sha256:1169d376c297e7de388d18b4481760d478b0e99a777cad3a9c86e556f4b697cb", size = 48036, upload-time = "2025-04-02T08:25:09.966Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/30/643397144bfbfec6f6ef821f36f33e57d35946c44a2352d3c9f0ae847619/tenacity-9.1.2-py3-none-any.whl", hash = "sha256:f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138", size = 28248, upload-time = "2025-04-02T08:25:07.678Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
 ]
 
 [[package]]
